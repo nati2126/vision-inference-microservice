@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vision-inference-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      - LOG_FORMAT=console
+      - MODEL_NAME=yolov8n.pt
+      - MODEL_CONFIDENCE_THRESHOLD=0.25
+      - MODEL_DEVICE=cpu
+    volumes:
+      # Persist downloaded model weights across container restarts
+      - model-cache:/home/appuser/.cache
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  model-cache:
+    driver: local
