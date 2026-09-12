@@ -66,6 +66,9 @@ class ErrorResponse(BaseModel):
     """Standard error envelope returned on 4xx / 5xx responses."""
 
     error: str = Field(..., description="Human-readable error message")
+    # ``default=`` must be named: with a positional default, mypy's
+    # dataclass_transform handling does not see the field as optional and
+    # reports every construction as missing the argument.
     detail: str | None = Field(
-        None, description="Additional diagnostic information"
+        default=None, description="Additional diagnostic information"
     )

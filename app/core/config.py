@@ -42,6 +42,16 @@ class Settings(BaseSettings):
     # volume-mounted directory fixes that and makes the weights cache persist.
     model_weights_dir: Path = Path.home() / ".cache" / "vision-inference" / "weights"
 
+    # ── CORS ─────────────────────────────────────────────────
+    # Set as a JSON list, e.g. CORS_ALLOW_ORIGINS='["https://app.example.com"]'.
+    # ``["*"]`` is a development default — narrow it in production.
+    cors_allow_origins: list[str] = ["*"]
+    # Credentialed requests cannot be combined with a wildcard origin: the
+    # browser rejects ``Access-Control-Allow-Origin: *`` whenever credentials
+    # are included, so this defaults off and must be enabled alongside an
+    # explicit origin list.
+    cors_allow_credentials: bool = False
+
     # ── Logging ──────────────────────────────────────────────
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"

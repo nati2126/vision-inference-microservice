@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    name: Lint, types, tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # requirements.txt pins `torch>=2.0.0`, which resolves to the CUDA build
+      # on PyPI and drags in several GB of nvidia wheels. The runner has no
+      # GPU, so install the CPU build first; the next step then sees the
+      # requirement already satisfied.
+      - name: Install CPU-only torch
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # yolov8n.pt is downloaded on first model load. MODEL_WEIGHTS_DIR keeps
+      # it somewhere cacheable instead of the working directory.
+      - name: Cache model weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/vision-inference/weights
+          key: yolo-weights-${{ hashFiles('requirements.txt') }}
+          restore-keys: yolo-weights-
+
+      - name: Lint
+        run: ruff check app/ tests/
+
+      - name: Type check
+        run: mypy app/
+
+      - name: Test
+        run: pytest -v --tb=short
+
+  docker:
+    name: Image builds and serves
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t vision-inference:ci .
+
+      # Proves the service actually starts as the non-root user: ultralytics
+      # writes model weights on first load, and the working directory is not
+      # writable by that user.
+      - name: Start container
+        run: docker run -d --name vision-ci -p 8000:8000 vision-inference:ci
+
+      - name: Wait for healthy
+        run: |
+          for _ in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/api/v1/health; then
+              echo && echo "service is healthy" && exit 0
+            fi
+            sleep 5
+          done
+          echo "service never became healthy"
+          exit 1
+
+      - name: Smoke-test detection
+        run: |
+          curl -fsSL -o bus.jpg https://ultralytics.com/images/bus.jpg
+          curl -fsS -X POST http://localhost:8000/api/v1/detect -F "file=@bus.jpg"
+
+      - name: Container logs
+        if: always()
+        run: docker logs vision-ci

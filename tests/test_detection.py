@@ -6,6 +6,8 @@ import numpy as np
 import pytest
 from httpx import AsyncClient
 
+from app.services.detection_service import _MAX_IMAGE_SIZE_BYTES
+
 
 def _create_test_image_bytes(width: int = 640, height: int = 480) -> bytes:
     """Generate a synthetic JPEG image for testing.
@@ -91,3 +93,43 @@ async def test_detect_response_schema(client: AsyncClient) -> None:
         assert "bbox" in det
         assert all(k in det["bbox"] for k in ("x_min", "y_min", "x_max", "y_max"))
         assert 0.0 <= det["confidence"] <= 1.0
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_error_response_matches_documented_schema(client: AsyncClient) -> None:
+    """4xx bodies use the ErrorResponse envelope the endpoint advertises."""
+    response = await client.post(
+        "/api/v1/detect",
+        files={"file": ("test.txt", io.BytesIO(b"not an image"), "text/plain")},
+    )
+
+    assert response.status_code == 400
+
+    body = response.json()
+    assert "error" in body, "ErrorResponse declares `error`, not FastAPI's `detail`"
+    assert isinstance(body["error"], str)
+    assert "Unsupported file type" in body["error"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_detect_rejects_oversized_image(client: AsyncClient) -> None:
+    """An upload past the 10 MB cap is refused with 400."""
+    # bytes(n) is n zero bytes - large, and never a decodable image.
+    oversized = bytes(_MAX_IMAGE_SIZE_BYTES + 1)
+
+    response = await client.post(
+        "/api/v1/detect",
+        files={"file": ("big.jpg", io.BytesIO(oversized), "image/jpeg")},
+    )
+
+    assert response.status_code == 400
+    assert "exceeds maximum size" in response.json()["error"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_detect_requires_a_file(client: AsyncClient) -> None:
+    """A request with no file returns the validation envelope."""
+    response = await client.post("/api/v1/detect")
+
+    assert response.status_code == 422
+    assert response.json()["error"] == "Request validation failed."

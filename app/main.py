@@ -14,13 +14,16 @@ decorators. The lifespan manager is responsible for:
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 from app.models.yolo_model import YOLOModel
+from app.schemas.detection import ErrorResponse
 from app.services.detection_service import DetectionService
 
 logger = get_logger(__name__)
@@ -70,6 +73,45 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("application_stopped")
 
 
+def register_exception_handlers(app: FastAPI) -> None:
+    """Make error responses match the documented ``ErrorResponse`` schema.
+
+    FastAPI's defaults return ``{"detail": ...}``, while the endpoints
+    advertise ``ErrorResponse`` (``{"error": ..., "detail": ...}``) for their
+    4xx / 5xx responses. Without these handlers the OpenAPI contract and the
+    actual payloads disagree.
+    """
+
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=ErrorResponse(error=str(exc.detail)).model_dump(),
+            headers=exc.headers,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,  # name differs across starlette versions
+            content=ErrorResponse(
+                error="Request validation failed.",
+                detail=str(exc.errors()),
+            ).model_dump(),
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        # Never leak internals to the caller; the traceback goes to the logs.
+        logger.exception("unhandled_exception", path=request.url.path)
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=ErrorResponse(error="An unexpected error occurred.").model_dump(),
+        )
+
+
 def create_app() -> FastAPI:
     """Application factory — returns a fully configured FastAPI instance."""
     settings = get_settings()
@@ -87,13 +129,26 @@ def create_app() -> FastAPI:
     )
 
     # ── Middleware ────────────────────────────────────────────
+    allow_credentials = settings.cors_allow_credentials
+    if allow_credentials and "*" in settings.cors_allow_origins:
+        # Browsers refuse a credentialed response carrying the wildcard
+        # origin, so this combination silently breaks every such request.
+        logger.warning(
+            "cors_credentials_disabled_for_wildcard_origin",
+            hint="Set CORS_ALLOW_ORIGINS to an explicit list to use credentials.",
+        )
+        allow_credentials = False
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Tighten in production
-        allow_credentials=True,
+        allow_origins=settings.cors_allow_origins,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ── Error handling ───────────────────────────────────────
+    register_exception_handlers(app)
 
     # ── Routers ──────────────────────────────────────────────
     app.include_router(v1_router)
