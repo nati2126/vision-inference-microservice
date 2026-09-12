@@ -9,6 +9,9 @@ authors = [{ name = "Your Name", email = "you@example.com" }]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# The ``client`` fixture is session-scoped so the model loads once; the tests
+# pin a matching session loop scope on their own markers.
+asyncio_default_fixture_loop_scope = "session"
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.ruff]
@@ -28,3 +31,10 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+# ultralytics and cv2 ship no py.typed marker / stubs.
+[[tool.mypy.overrides]]
+module = ["ultralytics.*", "cv2.*"]
+ignore_missing_imports = true
+# ultralytics re-exports YOLO from a submodule without an explicit __all__.
+implicit_reexport = true

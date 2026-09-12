@@ -11,8 +11,8 @@ decorators. The lifespan manager is responsible for:
 5. Tearing everything down gracefully on shutdown
 """
 
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         model_name=settings.model_name,
         device=settings.model_device,
         confidence_threshold=settings.model_confidence_threshold,
+        weights_dir=settings.model_weights_dir,
     )
     model.load()
 

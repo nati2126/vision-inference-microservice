@@ -7,10 +7,11 @@ service methods.
 """
 
 import time
-from typing import Any
+from typing import Any, cast
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 from fastapi import UploadFile
 
 from app.core.logging import get_logger
@@ -82,14 +83,16 @@ class DetectionService:
     # ── Private helpers ──────────────────────────────────────
 
     @staticmethod
-    def _decode_image(raw_bytes: bytes) -> np.ndarray:
+    def _decode_image(raw_bytes: bytes) -> npt.NDArray[np.uint8]:
         """Decode raw file bytes into a BGR numpy array.
 
         Raises:
             ValueError: If OpenCV cannot decode the payload.
         """
         np_arr = np.frombuffer(raw_bytes, dtype=np.uint8)
-        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        # ``IMREAD_COLOR`` always yields an 8-bit 3-channel BGR array; the cv2
+        # stubs declare a wider dtype than that flag can actually produce.
+        image = cast("npt.NDArray[np.uint8] | None", cv2.imdecode(np_arr, cv2.IMREAD_COLOR))
         if image is None:
             raise ValueError(
                 "Unable to decode the uploaded file as an image. "

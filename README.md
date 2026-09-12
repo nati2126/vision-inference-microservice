@@ -142,6 +142,7 @@ All settings are driven by environment variables (see [`.env.example`](.env.exam
 | `MODEL_NAME` | `yolov8n.pt` | YOLOv8 model variant |
 | `MODEL_CONFIDENCE_THRESHOLD` | `0.25` | Minimum detection confidence |
 | `MODEL_DEVICE` | `cpu` | Compute device (`cpu` / `cuda` / `mps`) |
+| `MODEL_WEIGHTS_DIR` | `~/.cache/vision-inference/weights` | Where bare weight filenames are downloaded and cached |
 | `LOG_LEVEL` | `INFO` | Logging severity |
 | `LOG_FORMAT` | `json` | Output format (`json` / `console`) |
 | `ENVIRONMENT` | `development` | Runtime environment |

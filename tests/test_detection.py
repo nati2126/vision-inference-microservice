@@ -1,7 +1,6 @@
 """Tests for the detection endpoint."""
 
 import io
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -24,7 +23,7 @@ def _create_test_image_bytes(width: int = 640, height: int = 480) -> bytes:
     return buffer.tobytes()
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_detect_returns_200_with_valid_image(client: AsyncClient) -> None:
     """POST /api/v1/detect with a valid JPEG should return 200."""
     image_bytes = _create_test_image_bytes()
@@ -44,7 +43,7 @@ async def test_detect_returns_200_with_valid_image(client: AsyncClient) -> None:
     assert body["metadata"]["inference_time_ms"] > 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_detect_rejects_non_image_file(client: AsyncClient) -> None:
     """POST /api/v1/detect with a text file should return 400."""
     response = await client.post(
@@ -55,7 +54,7 @@ async def test_detect_rejects_non_image_file(client: AsyncClient) -> None:
     assert response.status_code == 400
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_detect_rejects_corrupt_image(client: AsyncClient) -> None:
     """POST /api/v1/detect with corrupt image bytes should return 400."""
     response = await client.post(
@@ -66,7 +65,7 @@ async def test_detect_rejects_corrupt_image(client: AsyncClient) -> None:
     assert response.status_code == 400
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_detect_response_schema(client: AsyncClient) -> None:
     """Verify detection response matches DetectionResponse schema."""
     image_bytes = _create_test_image_bytes()

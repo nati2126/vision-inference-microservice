@@ -7,7 +7,7 @@ used instead. The format is controlled by the ``LOG_FORMAT`` env var.
 
 import logging
 import sys
-from typing import Literal
+from typing import Literal, cast
 
 import structlog
 
@@ -70,4 +70,6 @@ def get_logger(name: str) -> structlog.stdlib.BoundLogger:
     Args:
         name: Logger name — typically ``__name__`` of the calling module.
     """
-    return structlog.get_logger(name)
+    # ``structlog.get_logger`` is typed as returning ``Any``; the configured
+    # ``wrapper_class`` above guarantees a stdlib ``BoundLogger``.
+    return cast(structlog.stdlib.BoundLogger, structlog.get_logger(name))
