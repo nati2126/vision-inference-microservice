@@ -6,6 +6,7 @@ development; production values should be injected via Docker env / secrets.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -34,6 +35,12 @@ class Settings(BaseSettings):
     model_name: str = "yolov8n.pt"
     model_confidence_threshold: float = 0.25
     model_device: str = "cpu"  # "cpu" | "cuda" | "mps"
+    # Directory that bare weight filenames are resolved against. Ultralytics
+    # downloads a relative filename into the *current working directory*, which
+    # is not writable in the container (WORKDIR is root-owned, the process runs
+    # as an unprivileged user). Handing it an absolute path under a writable,
+    # volume-mounted directory fixes that and makes the weights cache persist.
+    model_weights_dir: Path = Path.home() / ".cache" / "vision-inference" / "weights"
 
     # ── Logging ──────────────────────────────────────────────
     log_level: str = "INFO"

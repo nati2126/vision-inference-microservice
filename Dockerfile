@@ -44,6 +44,20 @@ WORKDIR /app
 COPY app/ ./app/
 COPY .env.example .env
 
+# Writable cache for model weights and the ultralytics settings file.
+#
+# WORKDIR is root-owned and the service runs as appuser, so anything that
+# writes relative to the CWD fails with PermissionError. Ultralytics
+# downloads a bare weight filename into the CWD and writes settings.json
+# into its config dir, so both are pointed at appuser-owned paths under
+# /home/appuser/.cache — the directory docker-compose mounts as a volume,
+# which is what makes the weights survive a container restart.
+ENV MODEL_WEIGHTS_DIR=/home/appuser/.cache/vision-inference/weights \
+    YOLO_CONFIG_DIR=/home/appuser/.cache/ultralytics
+
+RUN mkdir -p "$MODEL_WEIGHTS_DIR" "$YOLO_CONFIG_DIR" && \
+    chown -R appuser:appuser /home/appuser/.cache
+
 # Switch to non-root user
 USER appuser
 
