@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Production-grade object detection inference microservice powered by YOLOv8 and FastAPI"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "Your Name", email = "you@example.com" }]
+authors = [{ name = "nati2126" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

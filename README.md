@@ -35,7 +35,7 @@ app/
 
 ```bash
 # 1. Clone & enter
-git clone https://github.com/your-user/vision-inference-microservice.git
+git clone https://github.com/nati2126/vision-inference-microservice.git
 cd vision-inference-microservice
 
 # 2. Create virtual environment
@@ -114,6 +114,23 @@ curl -X POST http://localhost:8000/api/v1/detect \
 }
 ```
 
+### Errors
+
+Failures return the `ErrorResponse` envelope:
+
+```json
+{
+  "error": "Unsupported file type 'text/plain'. Accepted: image/bmp, image/jpeg, ...",
+  "detail": null
+}
+```
+
+| Status | Cause |
+|--------|-------|
+| `400` | Unsupported content type, undecodable image, empty body, or over the 10 MB cap |
+| `422` | Malformed request (e.g. no file field) |
+| `500` | Inference failure — details are logged, never returned |
+
 ### Interactive Docs
 
 - **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
@@ -143,6 +160,8 @@ All settings are driven by environment variables (see [`.env.example`](.env.exam
 | `MODEL_CONFIDENCE_THRESHOLD` | `0.25` | Minimum detection confidence |
 | `MODEL_DEVICE` | `cpu` | Compute device (`cpu` / `cuda` / `mps`) |
 | `MODEL_WEIGHTS_DIR` | `~/.cache/vision-inference/weights` | Where bare weight filenames are downloaded and cached |
+| `CORS_ALLOW_ORIGINS` | `["*"]` | Allowed origins, as a JSON list |
+| `CORS_ALLOW_CREDENTIALS` | `false` | Ignored while origins is `["*"]` — browsers reject that pairing |
 | `LOG_LEVEL` | `INFO` | Logging severity |
 | `LOG_FORMAT` | `json` | Output format (`json` / `console`) |
 | `ENVIRONMENT` | `development` | Runtime environment |
