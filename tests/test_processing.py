@@ -1,4 +1,4 @@
-"""Unit tests for the NumPy pre/post-processing shared by the exported backends."""
+"""NumPy pre/post-processing."""
 
 import numpy as np
 import pytest
@@ -16,14 +16,10 @@ from app.models.processing import (
 
 
 def _to_letterboxed(boxes: np.ndarray, info: LetterboxInfo) -> np.ndarray:
-    """Forward transform: original-image pixels -> network-input pixels."""
     out = boxes.astype(np.float32).copy()
     out[:, [0, 2]] = out[:, [0, 2]] * info.scale + info.pad_left
     out[:, [1, 3]] = out[:, [1, 3]] * info.scale + info.pad_top
     return out
-
-
-# ── Letterbox ────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(("height", "width"), [(480, 640), (1080, 810), (640, 640), (100, 37)])
@@ -34,9 +30,7 @@ def test_letterbox_output_is_square_and_keeps_aspect(height: int, width: int) ->
 
     assert padded.shape == (640, 640, 3)
     assert padded.dtype == np.uint8
-    # The long side fills the input; the short side is scaled by the same factor.
     assert info.scale == pytest.approx(640 / max(height, width))
-    # Padding is split evenly (to the pixel) and uses ultralytics' grey.
     content_w, content_h = round(width * info.scale), round(height * info.scale)
     assert abs(2 * info.pad_left + content_w - 640) <= 1
     assert abs(2 * info.pad_top + content_h - 640) <= 1
@@ -48,7 +42,6 @@ def test_letterbox_output_is_square_and_keeps_aspect(height: int, width: int) ->
 
 @pytest.mark.parametrize(("height", "width"), [(480, 640), (1080, 810), (333, 1000)])
 def test_letterbox_then_rescale_round_trips_boxes(height: int, width: int) -> None:
-    """Mapping a box into the network input and back recovers it."""
     _, info = letterbox(np.zeros((height, width, 3), dtype=np.uint8), 640)
     boxes = np.array(
         [
@@ -75,7 +68,7 @@ def test_rescale_clips_boxes_to_the_image() -> None:
 
 def test_preprocess_layout_dtype_and_range() -> None:
     image = np.zeros((480, 640, 3), dtype=np.uint8)
-    image[..., 2] = 255  # pure red in BGR
+    image[..., 2] = 255
 
     tensor, _ = preprocess(image, 640)
 
@@ -84,21 +77,17 @@ def test_preprocess_layout_dtype_and_range() -> None:
     assert tensor.flags["C_CONTIGUOUS"]
     assert tensor.min() >= 0.0
     assert tensor.max() <= 1.0
-    # BGR -> RGB: red lands in channel 0 (inside the unpadded region).
     assert tensor[0, 0, 320, 320] == pytest.approx(1.0)
     assert tensor[0, 2, 320, 320] == pytest.approx(0.0)
-
-
-# ── NMS ──────────────────────────────────────────────────────
 
 
 def test_nms_suppresses_overlapping_boxes_keeping_the_best() -> None:
     boxes = np.array(
         [
-            [0, 0, 100, 100],  # 0: best of the cluster
-            [5, 5, 105, 105],  # 1: IoU ~0.82 with 0 -> suppressed
-            [200, 200, 300, 300],  # 2: separate object
-            [0, 0, 100, 50],  # 3: IoU 0.5 with 0 -> kept at threshold 0.7
+            [0, 0, 100, 100],
+            [5, 5, 105, 105],
+            [200, 200, 300, 300],
+            [0, 0, 100, 50],
         ],
         dtype=np.float32,
     )
@@ -122,11 +111,7 @@ def test_nms_handles_empty_input() -> None:
     assert keep.shape == (0,)
 
 
-# ── Decode + postprocess ─────────────────────────────────────
-
-
 def _raw_output(candidates: list[tuple[float, float, float, float, int, float]]) -> np.ndarray:
-    """Build a YOLOv8-shaped (1, 84, N) output from (cx, cy, w, h, class, score)."""
     out = np.zeros((1, 4 + len(COCO_CLASSES), len(candidates)), dtype=np.float32)
     for i, (cx, cy, w, h, cls, score) in enumerate(candidates):
         out[0, :4, i] = (cx, cy, w, h)
@@ -135,14 +120,13 @@ def _raw_output(candidates: list[tuple[float, float, float, float, int, float]])
 
 
 def test_postprocess_decodes_filters_and_rescales() -> None:
-    # A 640x480 image letterboxes with scale 1 and 80 px of padding on top.
     info = LetterboxInfo(scale=1.0, pad_left=0, pad_top=80)
     output = _raw_output(
         [
-            (100, 180, 40, 60, 0, 0.9),  # person -> kept
-            (102, 181, 40, 60, 0, 0.8),  # duplicate person -> NMS
-            (102, 181, 40, 60, 16, 0.7),  # dog at the same spot -> other class, kept
-            (400, 300, 50, 50, 2, 0.1),  # car under threshold -> filtered
+            (100, 180, 40, 60, 0, 0.9),
+            (102, 181, 40, 60, 0, 0.8),
+            (102, 181, 40, 60, 16, 0.7),
+            (400, 300, 50, 50, 2, 0.1),
         ]
     )
 
@@ -153,7 +137,6 @@ def test_postprocess_decodes_filters_and_rescales() -> None:
         ("dog", 0.7),
     ]
     person = detections[0]
-    # cx=100, w=40 -> x 80..120; cy=180-80 pad=100, h=60 -> y 70..130.
     assert (person.x_min, person.y_min, person.x_max, person.y_max) == pytest.approx(
         (80, 70, 120, 130)
     )

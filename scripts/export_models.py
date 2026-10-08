@@ -1,19 +1,4 @@
-"""Export yolov8n to every backend format used by the service and benchmark.
-
-    python -m scripts.export_models [--skip openvino tensorrt] [--force]
-
-Produces, under ``models/``:
-
-    yolov8n.pt                      PyTorch weights (downloaded)
-    yolov8n.onnx                    ONNX FP32, static 1x3x640x640, opset 17
-    yolov8n_int8.onnx               ONNX INT8, static QDQ quantisation
-    yolov8n_openvino/               OpenVINO IR FP32          [openvino extra]
-    yolov8n_int8_openvino/          OpenVINO IR from the INT8 ONNX
-    yolov8n_fp16.engine (+ .json)   TensorRT FP16 engine      [tensorrt extra]
-
-Existing artifacts are reused unless ``--force`` is given; the TensorRT
-build in particular takes minutes.
-"""
+"""Export yolov8n to ONNX FP32/INT8, OpenVINO and TensorRT under models/."""
 
 import argparse
 import importlib.util
@@ -23,8 +8,6 @@ import time
 from collections.abc import Iterator
 from pathlib import Path
 
-# Ultralytics pip-installs missing packages on the fly by default. An export
-# script must fail loudly instead of mutating the environment.
 os.environ.setdefault("YOLO_AUTOINSTALL", "false")
 
 import numpy as np
@@ -37,18 +20,10 @@ from benchmark.coco128 import ensure_coco128, image_paths
 INPUT_SIZE = 640
 OPSET = 17
 
-# The decode tail of YOLOv8's Detect head (model.22), kept in float during
-# INT8 quantisation. Its last Concat joins box coordinates (0..640 px) with
-# sigmoid class scores (0..1) in a single tensor; one per-tensor UInt8 scale
-# covering 0..640 has a step of ~2.5, which rounds every class score to 0 or
-# 2.5 and destroys accuracy. 63 of the 64 convolutions, including the head's
-# cv2/cv3 branches, are still quantised; only the DFL's fixed-weight 1x1 conv
-# lies in the tail.
+# The Detect head's decode tail stays FP32: its final Concat mixes 0-640 px boxes
+# with 0-1 scores, and one UInt8 scale over that range rounds every score to 0.
 _HEAD_PREFIX = "/model.22/"
 _HEAD_CONV_BRANCHES = ("/model.22/cv2", "/model.22/cv3")
-
-
-# ── Helpers ──────────────────────────────────────────────────
 
 
 def _size_mb(path: Path) -> float:
@@ -58,7 +33,6 @@ def _size_mb(path: Path) -> float:
 
 
 def _names_metadata(onnx_path: Path) -> str | None:
-    """The class-name metadata ultralytics writes into its ONNX export."""
     model = onnx.load(str(onnx_path), load_external_data=False)
     return next((p.value for p in model.metadata_props if p.key == "names"), None)
 
@@ -74,11 +48,7 @@ def _should_build(path: Path, force: bool) -> bool:
     return True
 
 
-# ── PyTorch / ONNX FP32 ──────────────────────────────────────
-
-
 def export_onnx_fp32(models_dir: Path, force: bool) -> Path:
-    """Download yolov8n.pt and export it to a static-shape ONNX FP32 graph."""
     import torch
     from ultralytics import YOLO
 
@@ -86,32 +56,21 @@ def export_onnx_fp32(models_dir: Path, force: bool) -> Path:
     if not _should_build(onnx_path, force):
         return onnx_path
 
-    # Ultralytics downloads a known asset name to the path given.
     model = YOLO(str(models_dir / "yolov8n.pt"))
     exported = model.export(
         format="onnx",
         imgsz=INPUT_SIZE,
         opset=OPSET,
-        dynamic=False,  # static shapes: required by TensorRT, faster everywhere
-        simplify=False,  # onnxslim is not a dependency; ORT optimises at load
-        # A torch.device, not "cpu": the string makes ultralytics set
-        # CUDA_VISIBLE_DEVICES=-1 for the whole process, and the TensorRT
-        # build later in this script would then find no GPU.
+        dynamic=False,
+        simplify=False,
+        # A "cpu" string would hide the GPU from the later TensorRT build.
         device=torch.device("cpu"),
     )
     return Path(exported)
 
 
-# ── ONNX INT8 (static quantisation) ──────────────────────────
-
-
 class _CalibrationReader:
-    """Feeds preprocessed coco128 images to the ORT calibrator, one at a time.
-
-    The images go through exactly the same letterbox/normalisation as at
-    inference time, so the observed activation ranges match what the
-    quantised model will actually see.
-    """
+    """Feeds coco128 images through the serving preprocessing to the calibrator."""
 
     def __init__(self, input_name: str, images: list[Path]) -> None:
         self._input_name = input_name
@@ -136,20 +95,7 @@ def export_onnx_int8(
     force: bool,
     keep_head_fp32: bool = True,
 ) -> Path:
-    """Static INT8 quantisation of the FP32 graph with ONNX Runtime.
-
-    *Static* means activation ranges are measured once, offline, on
-    calibration data, and baked into the graph as fixed scales and zero
-    points. (Dynamic quantisation computes them per inference, which costs
-    time and is aimed at MatMul-heavy models, not CNNs.)
-
-    Format: QDQ, i.e. QuantizeLinear/DequantizeLinear pairs around each
-    quantised op. Runtimes fuse the pairs into INT8 kernels, and the same
-    file also runs on OpenVINO.
-
-    ``keep_head_fp32=False`` quantises the decode tail too; it exists only
-    to reproduce the accuracy collapse described at ``_HEAD_PREFIX``.
-    """
+    """Static QDQ INT8 quantisation; keep_head_fp32=False reproduces the naive collapse."""
     from onnxruntime.quantization import (
         CalibrationMethod,
         QuantFormat,
@@ -163,9 +109,6 @@ def export_onnx_int8(
 
     prepared = int8_path.parent / ".cache" / "yolov8n_prepared.onnx"
     prepared.parent.mkdir(parents=True, exist_ok=True)
-    # Shape inference + graph optimisation (e.g. folding BatchNorm) before
-    # quantising, as ORT recommends; otherwise the quantiser sees ops that
-    # would have been fused away and calibrates the wrong tensors.
     quant_pre_process(str(fp32_path), str(prepared))
 
     graph = onnx.load(str(prepared))
@@ -187,9 +130,6 @@ def export_onnx_int8(
         model_output=str(int8_path),
         calibration_data_reader=_CalibrationReader(input_name, images),
         quant_format=QuantFormat.QDQ,
-        # U8 activations / S8 weights: the combination x86 VNNI kernels are
-        # built for. Per-channel weight scales track each filter's own range,
-        # which matters for depthwise-heavy and small models like yolov8n.
         activation_type=QuantType.QUInt8,
         weight_type=QuantType.QInt8,
         per_channel=True,
@@ -197,7 +137,6 @@ def export_onnx_int8(
         nodes_to_exclude=head_tail,
     )
 
-    # Carry the class names over; the quantiser does not copy metadata.
     names = _names_metadata(fp32_path)
     quantized = onnx.load(str(int8_path))
     if names is not None and not any(p.key == "names" for p in quantized.metadata_props):
@@ -206,11 +145,7 @@ def export_onnx_int8(
     return int8_path
 
 
-# ── OpenVINO ─────────────────────────────────────────────────
-
-
 def export_openvino(onnx_path: Path, out_dir: Path, force: bool) -> Path:
-    """Convert an ONNX file (FP32 or QDQ INT8) to OpenVINO IR."""
     import openvino as ov
 
     from app.models.openvino_backend import NAMES_RT_INFO_KEY
@@ -223,22 +158,12 @@ def export_openvino(onnx_path: Path, out_dir: Path, force: bool) -> Path:
     names = _names_metadata(onnx_path)
     if names is not None:
         model.set_rt_info(names, NAMES_RT_INFO_KEY)
-    # Keep FP32 weights: compress_to_fp16 defaults to True and would make
-    # the "FP32" row of the benchmark something else.
     ov.save_model(model, str(xml_path), compress_to_fp16=False)
     return xml_path
 
 
-# ── TensorRT ─────────────────────────────────────────────────
-
-
 def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path:
-    """Build a TensorRT FP16 engine from the FP32 ONNX graph.
-
-    FP16 is not a separate model: TensorRT is *allowed* to pick FP16 kernels
-    for each layer and keeps FP32 where that is faster or required. Engines
-    are tied to this GPU and TensorRT version; rebuild them per machine.
-    """
+    """Build an FP16 engine; it only runs on this GPU and TensorRT version."""
     import tensorrt as trt
     import torch
 
@@ -250,7 +175,7 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
 
     logger = trt.Logger(trt.Logger.WARNING)
     builder = trt.Builder(logger)
-    network = builder.create_network(0)  # explicit batch is the only mode in TRT 10
+    network = builder.create_network(0)
     parser = trt.OnnxParser(network, logger)
     if not parser.parse(onnx_path.read_bytes()):
         errors = [str(parser.get_error(i)) for i in range(parser.num_errors)]
@@ -259,8 +184,6 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
     config = builder.create_builder_config()
     config.set_flag(trt.BuilderFlag.FP16)
 
-    # The timing cache stores kernel benchmark results, so a rebuild on the
-    # same GPU skips most of the (multi-minute) tactic search.
     cache_path = models_dir / ".cache" / "tensorrt_timing.cache"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache = config.create_timing_cache(cache_path.read_bytes() if cache_path.exists() else b"")
@@ -294,11 +217,8 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
     return engine_path
 
 
-# ── Entry point ──────────────────────────────────────────────
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--models-dir", type=Path, default=Path("models"))
     parser.add_argument("--calib-images", type=int, default=100)
     parser.add_argument(

@@ -1,9 +1,4 @@
-"""OpenVINO backend for Intel CPUs, using the shared NumPy pre/post-processing.
-
-Accepts an OpenVINO IR (``.xml`` + ``.bin``) or an ONNX file directly. A
-quantised (QDQ) ONNX model is converted to ``FakeQuantize`` operations, which
-the CPU plugin executes with INT8 kernels.
-"""
+"""OpenVINO CPU backend (IR or ONNX; QDQ models run as INT8)."""
 
 import numpy as np
 import numpy.typing as npt
@@ -16,13 +11,10 @@ from app.models.processing import postprocess, preprocess
 
 logger = get_logger(__name__)
 
-# Metadata key the export script writes the class names under.
 NAMES_RT_INFO_KEY = ["model_info", "names"]
 
 
 class OpenVINOBackend(InferenceBackend):
-    """YOLOv8 compiled for the OpenVINO CPU plugin."""
-
     name = "openvino"
 
     def __init__(
@@ -43,7 +35,6 @@ class OpenVINOBackend(InferenceBackend):
         self._precision = "unknown"
 
     def load(self) -> None:
-        """Read, compile and warm up the model."""
         logger.info("loading_model", backend=self.name, path=self.model_path, device=self.device)
         core = ov.Core()
         model = core.read_model(self.model_path)
@@ -59,12 +50,8 @@ class OpenVINOBackend(InferenceBackend):
             model,
             "CPU",
             {
-                # Batch-1 serving: minimise per-request latency rather than
-                # maximise throughput across parallel streams.
                 "PERFORMANCE_HINT": "LATENCY",
-                # On CPUs with AMX / AVX512-BF16 OpenVINO defaults to bf16
-                # for FP32 models. Pin f32 so "FP32" means the same thing on
-                # every machine. Quantised regions still run in INT8.
+                # Otherwise CPUs with AMX/AVX512-BF16 silently run FP32 models in bf16.
                 "INFERENCE_PRECISION_HINT": "f32",
             },
         )
@@ -88,7 +75,6 @@ class OpenVINOBackend(InferenceBackend):
         logger.info("model_unloaded", backend=self.name)
 
     def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
-        """Run detection on a BGR ``(H, W, 3)`` image."""
         if self._request is None:
             raise RuntimeError("Model is not loaded. Call .load() first.")
 

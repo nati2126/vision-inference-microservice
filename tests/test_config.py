@@ -1,4 +1,4 @@
-"""Settings: backend selection and the MODEL_NAME compatibility alias."""
+"""Settings and the MODEL_NAME alias."""
 
 import pytest
 from pydantic import ValidationError

@@ -1,9 +1,4 @@
-"""Class names for the exported backends.
-
-Ultralytics stores the class names in the ONNX metadata as the ``repr`` of a
-``{id: name}`` dict. Artifacts that lose that metadata (a quantised or
-converted copy) fall back to the 80 COCO classes yolov8n was trained on.
-"""
+"""Class names for the exported backends."""
 
 import ast
 
@@ -24,11 +19,7 @@ COCO_CLASSES: list[str] = [
 
 
 def parse_names(raw: str | None) -> list[str]:
-    """Parse ultralytics' ``names`` metadata, falling back to COCO classes.
-
-    ``ast.literal_eval`` only accepts Python literals, so a tampered
-    metadata string cannot execute code.
-    """
+    """Parse ultralytics' ``names`` metadata, falling back to COCO classes."""
     if not raw:
         return list(COCO_CLASSES)
     try:

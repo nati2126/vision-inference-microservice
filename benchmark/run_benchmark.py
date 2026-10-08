@@ -1,17 +1,4 @@
-"""Benchmark every available backend: accuracy, latency, memory and HTTP.
-
-    python -m benchmark.run_benchmark            # full run, ~10 min
-    python -m benchmark.run_benchmark --quick    # smoke run, ~2 min
-
-Run ``python -m scripts.export_models`` first. Backends whose artifact or
-package is missing are reported as skipped, never estimated.
-
-Each backend's model-level measurements run in a fresh subprocess (the
-``--worker`` mode below), so peak memory belongs to that backend alone and
-no CUDA or thread-pool state leaks from one backend into the next.
-
-Results go to ``benchmark/results/<hardware-tag>[-quick].{json,md}``.
-"""
+"""Benchmark every available backend: accuracy, latency, memory and HTTP."""
 
 import argparse
 import importlib.util
@@ -34,24 +21,17 @@ from benchmark.metrics import DetectionEvaluator
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
-# Serving thresholds: what the API runs with, so latency is measured here.
 SERVE_CONF, SERVE_IOU, SERVE_MAX_DET = 0.25, 0.7, 300
-# Evaluation thresholds: the standard low confidence floor for mAP, so the
-# precision-recall curve is traced all the way down. Identical for every
-# backend.
 EVAL_CONF, EVAL_IOU, EVAL_MAX_DET = 0.001, 0.7, 300
 
 
 @dataclass(frozen=True)
 class Config:
-    """One row of the benchmark: a backend, a device and an artifact."""
-
     name: str
     backend: str
     device: str
     model_path: str
     package: str
-    # Ablations are scored for accuracy only; they are not serving candidates.
     accuracy_only: bool = False
 
 
@@ -70,8 +50,6 @@ CONFIGS = (
 
 @dataclass(frozen=True)
 class Budget:
-    """How much work each phase does; ``--quick`` shrinks every number."""
-
     eval_images: int | None  # None = all 128
     warmup_runs: int
     timed_runs: int
@@ -84,11 +62,7 @@ FULL = Budget(None, 10, 100, 200, 5, (1, 8))
 QUICK = Budget(16, 3, 20, 20, 2, (1, 8))
 
 
-# ── Worker (runs inside a fresh subprocess) ──────────────────
-
-
 def _peak_rss_mb() -> float:
-    """Peak resident memory of this process so far."""
     if sys.platform == "win32":
         import psutil
 
@@ -96,18 +70,12 @@ def _peak_rss_mb() -> float:
 
     import resource
 
-    # ru_maxrss is KiB on Linux, bytes on macOS.
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return peak * (1 if sys.platform == "darwin" else 1024) / 1e6
 
 
 class _GpuMemorySampler:
-    """Polls device memory in the background and records the peak.
-
-    NVML reports memory in use on the whole device, so this is measured as
-    peak minus the level before the model loaded. Other processes changing
-    their usage during the run would show up here too.
-    """
+    """Peak device-wide GPU memory above the pre-load baseline, via NVML."""
 
     def __init__(self) -> None:
         import pynvml
@@ -129,7 +97,6 @@ class _GpuMemorySampler:
             self.peak = max(self.peak, self._used())
 
     def stop(self) -> float:
-        """Stop sampling; return the peak increase in MB."""
         self._stop.set()
         self._thread.join()
         self._nvml.nvmlShutdown()
@@ -137,7 +104,6 @@ class _GpuMemorySampler:
 
 
 def run_worker(config: Config, budget: Budget) -> dict[str, Any]:
-    """Load one backend and measure latency, accuracy and memory."""
     from app.core.logging import setup_logging
     from app.models.factory import create_backend
 
@@ -161,7 +127,6 @@ def run_worker(config: Config, budget: Budget) -> dict[str, Any]:
 
     dataset_dir = ensure_coco128()
 
-    # ── Latency: serving thresholds, one fixed image, batch 1 ───
     if not config.accuracy_only:
         import cv2
 
@@ -186,7 +151,6 @@ def run_worker(config: Config, budget: Budget) -> dict[str, Any]:
             "throughput_img_s": round(1000.0 / float(ms.mean()), 1),
         }
 
-    # ── Accuracy: evaluation thresholds, same code for all ──────
     backend.confidence_threshold = EVAL_CONF
     backend.iou_threshold = EVAL_IOU
     backend.max_detections = EVAL_MAX_DET
@@ -217,11 +181,7 @@ def run_worker(config: Config, budget: Budget) -> dict[str, Any]:
     return result
 
 
-# ── Orchestrator ─────────────────────────────────────────────
-
-
 def _artifact_size_mb(path: Path) -> float:
-    # An OpenVINO IR is an .xml graph plus a .bin of weights.
     files = [path, path.with_suffix(".bin")] if path.suffix == ".xml" else [path]
     return round(sum(f.stat().st_size for f in files if f.exists()) / 1e6, 2)
 
@@ -287,7 +247,6 @@ def run_all(quick: bool, only: list[str] | None, skip_http: bool) -> dict[str, A
                     budget.http_concurrency,
                     budget.http_warmup,
                 )
-                # The server must be running what this row claims it is.
                 served = (http["health"]["backend"], http["health"]["precision"])
                 if served != (config.backend, row["precision"]):
                     raise RuntimeError(f"server reported {served}, expected {config.backend}")
@@ -324,7 +283,7 @@ def run_all(quick: bool, only: list[str] | None, skip_http: bool) -> dict[str, A
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--quick", action="store_true", help="smaller budget, ~2 minutes")
     parser.add_argument("--only", nargs="*", help="run only these config names")
     parser.add_argument("--skip-http", action="store_true", help="skip the HTTP load test")

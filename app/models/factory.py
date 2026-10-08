@@ -1,9 +1,4 @@
-"""Build the configured inference backend.
-
-Backend modules are imported lazily: OpenVINO and TensorRT are optional
-extras, and a missing package should only matter when that backend is
-actually selected.
-"""
+"""Backend factory; imports lazily so optional extras are only needed when selected."""
 
 from pathlib import Path
 from typing import Literal
@@ -23,12 +18,6 @@ def create_backend(
     max_detections: int = 300,
     weights_dir: Path | None = None,
 ) -> InferenceBackend:
-    """Instantiate (but do not load) the backend called ``backend``.
-
-    Raises:
-        ValueError: For an unknown backend name or an unsupported device.
-        ImportError: If the backend's optional dependency is not installed.
-    """
     backend_cls: type[InferenceBackend]
     if backend == "pytorch":
         from app.models.pytorch_backend import PyTorchBackend

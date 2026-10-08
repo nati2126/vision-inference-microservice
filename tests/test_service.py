@@ -1,8 +1,4 @@
-"""Unit tests for DetectionService, using a stand-in model.
-
-These exercise the service layer without loading real weights, so they stay
-fast and cover the error paths the endpoint tests cannot reach directly.
-"""
+"""DetectionService with a stub model."""
 
 import io
 
@@ -17,8 +13,6 @@ from app.services.detection_service import _MAX_IMAGE_SIZE_BYTES, DetectionServi
 
 
 class _StubModel:
-    """Minimal stand-in for an InferenceBackend that records what it was given."""
-
     def __init__(self) -> None:
         self.calls: list[tuple[int, int]] = []
 
@@ -39,7 +33,6 @@ def _jpeg_bytes(width: int = 64, height: int = 32) -> bytes:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_reports_image_dimensions() -> None:
-    """Metadata reflects the decoded image, not the request."""
     service = DetectionService(model=_StubModel())  # type: ignore[arg-type]
 
     result = await service.detect(_upload(_jpeg_bytes(64, 32)))
@@ -56,7 +49,6 @@ async def test_detect_reports_image_dimensions() -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_oversized_upload_is_rejected() -> None:
-    """The size cap is enforced, and the model is never invoked."""
     model = _StubModel()
     service = DetectionService(model=model)  # type: ignore[arg-type]
     oversized = b"\x00" * (_MAX_IMAGE_SIZE_BYTES + 1)
@@ -69,7 +61,6 @@ async def test_oversized_upload_is_rejected() -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_upload_at_the_limit_is_not_rejected_for_size() -> None:
-    """A payload exactly at the cap fails on decoding, not on size."""
     service = DetectionService(model=_StubModel())  # type: ignore[arg-type]
     at_limit = b"\x00" * _MAX_IMAGE_SIZE_BYTES
 
@@ -87,7 +78,6 @@ async def test_undecodable_upload_raises_value_error() -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_empty_upload_raises_value_error() -> None:
-    """An empty body is a ValueError, not the cv2.error imdecode asserts with."""
     service = DetectionService(model=_StubModel())  # type: ignore[arg-type]
 
     with pytest.raises(ValueError, match="empty"):

@@ -1,4 +1,4 @@
-"""Tests for the detection endpoint."""
+"""/detect endpoint."""
 
 import io
 
@@ -10,11 +10,6 @@ from app.services.detection_service import _MAX_IMAGE_SIZE_BYTES
 
 
 def _create_test_image_bytes(width: int = 640, height: int = 480) -> bytes:
-    """Generate a synthetic JPEG image for testing.
-
-    Creates a simple gradient image that the model can process (it won't
-    detect much, but the pipeline should execute without errors).
-    """
     try:
         import cv2
     except ImportError:
@@ -27,7 +22,6 @@ def _create_test_image_bytes(width: int = 640, height: int = 480) -> bytes:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_returns_200_with_valid_image(client: AsyncClient) -> None:
-    """POST /api/v1/detect with a valid JPEG should return 200."""
     image_bytes = _create_test_image_bytes()
 
     response = await client.post(
@@ -47,7 +41,6 @@ async def test_detect_returns_200_with_valid_image(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_rejects_non_image_file(client: AsyncClient) -> None:
-    """POST /api/v1/detect with a text file should return 400."""
     response = await client.post(
         "/api/v1/detect",
         files={"file": ("test.txt", io.BytesIO(b"not an image"), "text/plain")},
@@ -58,7 +51,6 @@ async def test_detect_rejects_non_image_file(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_rejects_corrupt_image(client: AsyncClient) -> None:
-    """POST /api/v1/detect with corrupt image bytes should return 400."""
     response = await client.post(
         "/api/v1/detect",
         files={"file": ("bad.jpg", io.BytesIO(b"\x00\x01\x02"), "image/jpeg")},
@@ -69,7 +61,6 @@ async def test_detect_rejects_corrupt_image(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_response_schema(client: AsyncClient) -> None:
-    """Verify detection response matches DetectionResponse schema."""
     image_bytes = _create_test_image_bytes()
 
     response = await client.post(
@@ -79,14 +70,12 @@ async def test_detect_response_schema(client: AsyncClient) -> None:
 
     body = response.json()
 
-    # Metadata fields
     metadata = body["metadata"]
     assert "image_width" in metadata
     assert "image_height" in metadata
     assert "inference_time_ms" in metadata
     assert "detections_count" in metadata
 
-    # If there are detections, verify their shape
     for det in body["detections"]:
         assert "label" in det
         assert "confidence" in det
@@ -97,7 +86,6 @@ async def test_detect_response_schema(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_error_response_matches_documented_schema(client: AsyncClient) -> None:
-    """4xx bodies use the ErrorResponse envelope the endpoint advertises."""
     response = await client.post(
         "/api/v1/detect",
         files={"file": ("test.txt", io.BytesIO(b"not an image"), "text/plain")},
@@ -113,8 +101,6 @@ async def test_error_response_matches_documented_schema(client: AsyncClient) -> 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_rejects_oversized_image(client: AsyncClient) -> None:
-    """An upload past the 10 MB cap is refused with 400."""
-    # bytes(n) is n zero bytes - large, and never a decodable image.
     oversized = bytes(_MAX_IMAGE_SIZE_BYTES + 1)
 
     response = await client.post(
@@ -128,7 +114,6 @@ async def test_detect_rejects_oversized_image(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_requires_a_file(client: AsyncClient) -> None:
-    """A request with no file returns the validation envelope."""
     response = await client.post("/api/v1/detect")
 
     assert response.status_code == 422
@@ -137,7 +122,6 @@ async def test_detect_requires_a_file(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_rejects_empty_file(client: AsyncClient) -> None:
-    """A zero-byte upload is a 400 with a clear message, not a decoder crash."""
     response = await client.post(
         "/api/v1/detect",
         files={"file": ("empty.jpg", io.BytesIO(b""), "image/jpeg")},
@@ -149,7 +133,6 @@ async def test_detect_rejects_empty_file(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_rejects_image_content_type_with_non_image_bytes(client: AsyncClient) -> None:
-    """Claiming image/png does not get text past the decoder."""
     response = await client.post(
         "/api/v1/detect",
         files={"file": ("fake.png", io.BytesIO(b"hello, not a png"), "image/png")},
@@ -159,14 +142,10 @@ async def test_detect_rejects_image_content_type_with_non_image_bytes(client: As
     assert "Unable to decode" in response.json()["error"]
 
 
-# ── Same API, served by ONNX Runtime ─────────────────────────
-
-
 @pytest.mark.asyncio(loop_scope="session")
 async def test_onnx_backend_serves_the_same_response_schema(
     onnx_client: AsyncClient, client: AsyncClient
 ) -> None:
-    """Swapping the backend changes no field of the /detect response."""
     from ultralytics.utils import ASSETS
 
     image_bytes = (ASSETS / "bus.jpg").read_bytes()
