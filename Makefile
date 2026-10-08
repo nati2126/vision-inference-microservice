@@ -35,6 +35,12 @@ test: ## Run test suite
 export: ## Export ONNX FP32/INT8 (+ OpenVINO, TensorRT if installed) into models/
 	python -m scripts.export_models
 
+benchmark: ## Full benchmark of every available backend (~6-10 min)
+	python -m benchmark.run_benchmark
+
+benchmark-quick: ## Smoke-run of the benchmark (~2-3 min)
+	python -m benchmark.run_benchmark --quick
+
 # ── Docker ───────────────────────────────────────────────────
 
 docker-build: ## Build Docker image

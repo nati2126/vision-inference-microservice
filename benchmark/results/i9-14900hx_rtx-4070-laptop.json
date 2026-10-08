@@ -1,0 +1,497 @@
+{
+  "generated_at": "2026-10-08T09:14:54+00:00",
+  "mode": "full",
+  "duration_s": 387.5,
+  "hardware": {
+    "os": "Windows 10 (10.0.26200)",
+    "cpu": "Intel(R) Core(TM) i9-14900HX",
+    "cpu_cores_physical": 24,
+    "cpu_cores_logical": 32,
+    "ram_gb": 34.1,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+      "memory_gb": 8.6,
+      "driver": "591.86"
+    },
+    "on_ac_power": true,
+    "python": "3.11.14",
+    "packages": {
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.10.0.84",
+      "torch": "2.6.0+cu124",
+      "ultralytics": "8.3.57",
+      "onnx": "1.17.0",
+      "onnxruntime-gpu": "1.20.2",
+      "openvino": "2026.4.1",
+      "tensorrt-cu12": "10.16.1.11",
+      "fastapi": "0.115.6",
+      "uvicorn": "0.34.0"
+    },
+    "git_commit": "da3835c"
+  },
+  "settings": {
+    "budget": {
+      "eval_images": null,
+      "warmup_runs": 10,
+      "timed_runs": 100,
+      "http_requests": 200,
+      "http_warmup": 5,
+      "http_concurrency": [
+        1,
+        8
+      ]
+    },
+    "input_size": 640,
+    "serving_thresholds": {
+      "conf": 0.25,
+      "iou": 0.7,
+      "max_det": 300
+    },
+    "eval_thresholds": {
+      "conf": 0.001,
+      "iou": 0.7,
+      "max_det": 300
+    },
+    "dataset": "coco128 (first 128 images of COCO train2017)"
+  },
+  "results": [
+    {
+      "name": "pytorch-cpu-fp32",
+      "backend": "pytorch",
+      "device": "cpu",
+      "model_path": "models/yolov8n.pt",
+      "package": "torch",
+      "accuracy_only": false,
+      "precision": "fp32",
+      "load_s": 3.07,
+      "latency": {
+        "image": "000000000009.jpg",
+        "image_size": [
+          640,
+          480
+        ],
+        "warmup_runs": 10,
+        "timed_runs": 100,
+        "mean_ms": 98.07,
+        "p50_ms": 96.73,
+        "p95_ms": 110.37,
+        "throughput_img_s": 10.2
+      },
+      "accuracy": {
+        "map50": 0.6066,
+        "map50_95": 0.4478,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 752.8,
+      "size_mb": 6.55,
+      "http": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 124.32,
+          "p95_ms": 143.05,
+          "mean_ms": 124.99,
+          "requests_per_s": 8.0
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 826.4,
+          "p95_ms": 880.49,
+          "mean_ms": 816.26,
+          "requests_per_s": 9.6
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "pytorch-cuda-fp32",
+      "backend": "pytorch",
+      "device": "cuda",
+      "model_path": "models/yolov8n.pt",
+      "package": "torch",
+      "accuracy_only": false,
+      "precision": "fp32",
+      "load_s": 3.87,
+      "latency": {
+        "image": "000000000009.jpg",
+        "image_size": [
+          640,
+          480
+        ],
+        "warmup_runs": 10,
+        "timed_runs": 100,
+        "mean_ms": 22.75,
+        "p50_ms": 22.42,
+        "p95_ms": 24.39,
+        "throughput_img_s": 44.0
+      },
+      "accuracy": {
+        "map50": 0.6066,
+        "map50_95": 0.4477,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 1382.1,
+      "peak_gpu_mem_mb": 357.3,
+      "size_mb": 6.55,
+      "http": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 31.81,
+          "p95_ms": 35.36,
+          "mean_ms": 32.16,
+          "requests_per_s": 31.1
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 203.28,
+          "p95_ms": 266.13,
+          "mean_ms": 209.08,
+          "requests_per_s": 37.6
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "onnxruntime-cpu-fp32",
+      "backend": "onnxruntime",
+      "device": "cpu",
+      "model_path": "models/yolov8n.onnx",
+      "package": "onnxruntime",
+      "accuracy_only": false,
+      "precision": "fp32",
+      "load_s": 0.17,
+      "latency": {
+        "image": "000000000009.jpg",
+        "image_size": [
+          640,
+          480
+        ],
+        "warmup_runs": 10,
+        "timed_runs": 100,
+        "mean_ms": 42.77,
+        "p50_ms": 42.48,
+        "p95_ms": 45.17,
+        "throughput_img_s": 23.4
+      },
+      "accuracy": {
+        "map50": 0.5944,
+        "map50_95": 0.4444,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 169.6,
+      "size_mb": 12.82,
+      "http": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 50.86,
+          "p95_ms": 53.51,
+          "mean_ms": 51.28,
+          "requests_per_s": 19.5
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 349.0,
+          "p95_ms": 357.64,
+          "mean_ms": 343.49,
+          "requests_per_s": 22.9
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "onnxruntime-cpu-int8",
+      "backend": "onnxruntime",
+      "device": "cpu",
+      "model_path": "models/yolov8n_int8.onnx",
+      "package": "onnxruntime",
+      "accuracy_only": false,
+      "precision": "int8",
+      "load_s": 0.22,
+      "latency": {
+        "image": "000000000009.jpg",
+        "image_size": [
+          640,
+          480
+        ],
+        "warmup_runs": 10,
+        "timed_runs": 100,
+        "mean_ms": 52.31,
+        "p50_ms": 52.69,
+        "p95_ms": 53.88,
+        "throughput_img_s": 19.1
+      },
+      "accuracy": {
+        "map50": 0.5812,
+        "map50_95": 0.4297,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 142.2,
+      "size_mb": 3.66,
+      "http": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 63.02,
+          "p95_ms": 65.56,
+          "mean_ms": 63.24,
+          "requests_per_s": 15.8
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 437.56,
+          "p95_ms": 449.71,
+          "mean_ms": 432.62,
+          "requests_per_s": 18.2
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "onnxruntime-cuda-fp32",
+      "backend": "onnxruntime",
+      "device": "cuda",
+      "model_path": "models/yolov8n.onnx",
+      "package": "onnxruntime",
+      "accuracy_only": false,
+      "precision": "fp32",
+      "load_s": 5.45,
+      "latency": {
+        "image": "000000000009.jpg",
+        "image_size": [
+          640,
+          480
+        ],
+        "warmup_runs": 10,
+        "timed_runs": 100,
+        "mean_ms": 19.78,
+        "p50_ms": 19.59,
+        "p95_ms": 21.47,
+        "throughput_img_s": 50.6
+      },
+      "accuracy": {
+        "map50": 0.5944,
+        "map50_95": 0.4432,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 1152.8,
+      "peak_gpu_mem_mb": 221.0,
+      "size_mb": 12.82,
+      "http": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 28.78,
+          "p95_ms": 32.41,
+          "mean_ms": 29.27,
+          "requests_per_s": 34.2
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 174.33,
+          "p95_ms": 209.03,
+          "mean_ms": 179.82,
+          "requests_per_s": 43.6
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "openvino-cpu-fp32",
+      "backend": "openvino",
+      "device": "cpu",
+      "model_path": "models/yolov8n_openvino/yolov8n.xml",
+      "package": "openvino",
+      "accuracy_only": false,
+      "precision": "fp32",
+      "load_s": 0.43,
+      "latency": {
+        "image": "000000000009.jpg",
+        "image_size": [
+          640,
+          480
+        ],
+        "warmup_runs": 10,
+        "timed_runs": 100,
+        "mean_ms": 46.89,
+        "p50_ms": 46.79,
+        "p95_ms": 52.7,
+        "throughput_img_s": 21.3
+      },
+      "accuracy": {
+        "map50": 0.5944,
+        "map50_95": 0.4444,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 186.3,
+      "size_mb": 12.94,
+      "http": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 59.2,
+          "p95_ms": 70.86,
+          "mean_ms": 60.14,
+          "requests_per_s": 16.6
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 377.43,
+          "p95_ms": 461.92,
+          "mean_ms": 378.68,
+          "requests_per_s": 20.7
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "openvino-cpu-int8",
+      "backend": "openvino",
+      "device": "cpu",
+      "model_path": "models/yolov8n_int8_openvino/yolov8n_int8.xml",
+      "package": "openvino",
+      "accuracy_only": false,
+      "precision": "int8",
+      "load_s": 1.87,
+      "latency": {
+        "image": "000000000009.jpg",
+        "image_size": [
+          640,
+          480
+        ],
+        "warmup_runs": 10,
+        "timed_runs": 100,
+        "mean_ms": 33.22,
+        "p50_ms": 31.97,
+        "p95_ms": 40.9,
+        "throughput_img_s": 30.1
+      },
+      "accuracy": {
+        "map50": 0.5769,
+        "map50_95": 0.4296,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 207.2,
+      "size_mb": 4.39,
+      "http": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 46.88,
+          "p95_ms": 56.05,
+          "mean_ms": 47.75,
+          "requests_per_s": 20.9
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 313.4,
+          "p95_ms": 345.13,
+          "mean_ms": 310.97,
+          "requests_per_s": 25.3
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "tensorrt-cuda-fp16",
+      "backend": "tensorrt",
+      "device": "cuda",
+      "model_path": "models/yolov8n_fp16.engine",
+      "package": "tensorrt",
+      "accuracy_only": false,
+      "precision": "fp16",
+      "load_s": 1.15,
+      "latency": {
+        "image": "000000000009.jpg",
+        "image_size": [
+          640,
+          480
+        ],
+        "warmup_runs": 10,
+        "timed_runs": 100,
+        "mean_ms": 13.25,
+        "p50_ms": 13.23,
+        "p95_ms": 13.85,
+        "throughput_img_s": 75.5
+      },
+      "accuracy": {
+        "map50": 0.5952,
+        "map50_95": 0.4435,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 805.0,
+      "peak_gpu_mem_mb": 241.9,
+      "size_mb": 9.44,
+      "http": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 22.4,
+          "p95_ms": 24.91,
+          "mean_ms": 22.65,
+          "requests_per_s": 44.2
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 116.9,
+          "p95_ms": 121.91,
+          "mean_ms": 116.76,
+          "requests_per_s": 67.3
+        }
+      ],
+      "status": "ok"
+    },
+    {
+      "name": "onnxruntime-cpu-int8-naive",
+      "backend": "onnxruntime",
+      "device": "cpu",
+      "model_path": "models/yolov8n_int8_naive.onnx",
+      "package": "onnxruntime",
+      "accuracy_only": true,
+      "precision": "int8",
+      "load_s": 0.22,
+      "accuracy": {
+        "map50": 0.0,
+        "map50_95": 0.0,
+        "images": 128,
+        "gt_boxes": 929
+      },
+      "peak_rss_mb": 127.1,
+      "size_mb": 3.6,
+      "status": "ok"
+    }
+  ]
+}
