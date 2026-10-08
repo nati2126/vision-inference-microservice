@@ -21,7 +21,7 @@ jobs:
 
       # Avoids pulling the CUDA build and its nvidia wheels.
       - name: Install CPU-only torch
-        run: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch==2.6.0 torchvision==0.21.0
 
       - name: Install dependencies
         run: pip install -r requirements.txt
