@@ -133,3 +133,62 @@ async def test_detect_requires_a_file(client: AsyncClient) -> None:
 
     assert response.status_code == 422
     assert response.json()["error"] == "Request validation failed."
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_detect_rejects_empty_file(client: AsyncClient) -> None:
+    """A zero-byte upload is a 400 with a clear message, not a decoder crash."""
+    response = await client.post(
+        "/api/v1/detect",
+        files={"file": ("empty.jpg", io.BytesIO(b""), "image/jpeg")},
+    )
+
+    assert response.status_code == 400
+    assert "empty" in response.json()["error"]
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_detect_rejects_image_content_type_with_non_image_bytes(client: AsyncClient) -> None:
+    """Claiming image/png does not get text past the decoder."""
+    response = await client.post(
+        "/api/v1/detect",
+        files={"file": ("fake.png", io.BytesIO(b"hello, not a png"), "image/png")},
+    )
+
+    assert response.status_code == 400
+    assert "Unable to decode" in response.json()["error"]
+
+
+# ── Same API, served by ONNX Runtime ─────────────────────────
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_onnx_backend_serves_the_same_response_schema(
+    onnx_client: AsyncClient, client: AsyncClient
+) -> None:
+    """Swapping the backend changes no field of the /detect response."""
+    from ultralytics.utils import ASSETS
+
+    image_bytes = (ASSETS / "bus.jpg").read_bytes()
+    files = {"file": ("bus.jpg", image_bytes, "image/jpeg")}
+
+    onnx_body = (await onnx_client.post("/api/v1/detect", files=files)).json()
+    torch_body = (await client.post("/api/v1/detect", files=files)).json()
+
+    assert onnx_body.keys() == torch_body.keys()
+    assert onnx_body["metadata"].keys() == torch_body["metadata"].keys()
+    assert onnx_body["detections"][0].keys() == torch_body["detections"][0].keys()
+    assert onnx_body["metadata"]["image_width"] == 810
+    assert onnx_body["metadata"]["image_height"] == 1080
+    assert {d["label"] for d in onnx_body["detections"]} >= {"bus", "person"}
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_onnx_backend_rejects_bad_input_identically(onnx_client: AsyncClient) -> None:
+    response = await onnx_client.post(
+        "/api/v1/detect",
+        files={"file": ("test.txt", io.BytesIO(b"not an image"), "text/plain")},
+    )
+
+    assert response.status_code == 400
+    assert "Unsupported file type" in response.json()["error"]

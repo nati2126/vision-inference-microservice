@@ -6,7 +6,13 @@ post-processing are ultralytics' own, which is what makes it a useful
 reference for the parity test against :mod:`app.models.processing`.
 """
 
+import os
 from pathlib import Path
+
+# Ultralytics pip-installs packages it decides are missing, at runtime, by
+# default. A service must never mutate its own environment; fail instead.
+# Read when ultralytics is first imported, so it has to be set before that.
+os.environ.setdefault("YOLO_AUTOINSTALL", "false")
 
 import numpy as np
 import numpy.typing as npt
