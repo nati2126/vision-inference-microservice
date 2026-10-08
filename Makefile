@@ -1,4 +1,4 @@
-.PHONY: help install dev lint format typecheck test docker-build docker-up docker-down clean
+.PHONY: help install dev lint format typecheck test export benchmark benchmark-quick docker-build docker-up docker-down clean
 
 # ── Variables ────────────────────────────────────────────────
 IMAGE_NAME  := vision-inference-microservice
@@ -18,17 +18,22 @@ dev: ## Run development server with hot-reload
 	uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 lint: ## Run linter (ruff)
-	ruff check app/ tests/
+	ruff check app/ tests/ scripts/ benchmark/
 
 format: ## Auto-format code (ruff)
-	ruff format app/ tests/
-	ruff check --fix app/ tests/
+	ruff format app/ tests/ scripts/ benchmark/
+	ruff check --fix app/ tests/ scripts/ benchmark/
 
 typecheck: ## Run static type checker (mypy)
-	mypy app/
+	mypy app/ scripts/ benchmark/
 
 test: ## Run test suite
 	pytest -v --tb=short
+
+# ── Models ───────────────────────────────────────────────────
+
+export: ## Export ONNX FP32/INT8 (+ OpenVINO, TensorRT if installed) into models/
+	python -m scripts.export_models
 
 # ── Docker ───────────────────────────────────────────────────
 
