@@ -8,6 +8,9 @@ ultralytics==8.3.57
 torch>=2.0.0
 torchvision>=0.15.0
 opencv-python-headless==4.10.0.84
+# ONNX Runtime backend (CPU build; see pyproject.toml for the GPU extra).
+onnxruntime==1.20.1
+onnx==1.17.0
 
 # Configuration & validation
 pydantic==2.10.4

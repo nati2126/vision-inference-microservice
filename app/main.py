@@ -6,7 +6,7 @@ decorators. The lifespan manager is responsible for:
 
 1. Loading configuration
 2. Initialising structured logging
-3. Loading the ML model into memory (once)
+3. Building and loading the configured inference backend (once)
 4. Creating service instances
 5. Tearing everything down gracefully on shutdown
 """
@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.router import router as v1_router
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
-from app.models.yolo_model import YOLOModel
+from app.models.factory import create_backend
 from app.schemas.detection import ErrorResponse
 from app.services.detection_service import DetectionService
 
@@ -48,10 +48,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     # ── Model ────────────────────────────────────────────────
-    model = YOLOModel(
-        model_name=settings.model_name,
+    model = create_backend(
+        settings.model_backend,
+        model_path=settings.model_path,
         device=settings.model_device,
         confidence_threshold=settings.model_confidence_threshold,
+        iou_threshold=settings.model_iou_threshold,
+        max_detections=settings.model_max_detections,
         weights_dir=settings.model_weights_dir,
     )
     model.load()
@@ -120,8 +123,8 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=(
-            "Production-grade object detection inference microservice "
-            "powered by YOLOv8."
+            "Object detection inference service for YOLOv8 with interchangeable "
+            "PyTorch, ONNX Runtime, OpenVINO and TensorRT backends."
         ),
         docs_url="/docs",
         redoc_url="/redoc",

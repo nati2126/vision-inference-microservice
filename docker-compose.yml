@@ -11,7 +11,8 @@ services:
       - DEBUG=true
       - LOG_LEVEL=INFO
       - LOG_FORMAT=console
-      - MODEL_NAME=yolov8n.pt
+      - MODEL_BACKEND=pytorch
+      - MODEL_PATH=yolov8n.pt
       - MODEL_CONFIDENCE_THRESHOLD=0.25
       - MODEL_DEVICE=cpu
     volumes:
