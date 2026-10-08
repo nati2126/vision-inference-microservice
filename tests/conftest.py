@@ -15,6 +15,7 @@ from collections.abc import AsyncGenerator
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.core.config import get_settings
 from app.main import create_app
 
 
@@ -25,7 +26,14 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     ``scope="session"`` ensures the model is loaded only once across
     all tests — matching production behaviour and keeping the suite fast.
     """
-    app = create_app()
+    # Pin the backend so a developer's .env or shell cannot change what the
+    # API tests exercise. Environment variables take precedence over .env.
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("MODEL_BACKEND", "pytorch")
+        patch.setenv("MODEL_PATH", "yolov8n.pt")
+        patch.setenv("MODEL_DEVICE", "cpu")
+        get_settings.cache_clear()
+        app = create_app()
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://testserver") as ac:

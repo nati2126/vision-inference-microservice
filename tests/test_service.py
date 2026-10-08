@@ -5,7 +5,6 @@ fast and cover the error paths the endpoint tests cannot reach directly.
 """
 
 import io
-from typing import Any
 
 import cv2
 import numpy as np
@@ -13,24 +12,19 @@ import numpy.typing as npt
 import pytest
 from fastapi import UploadFile
 
+from app.models.base import Detection
 from app.services.detection_service import _MAX_IMAGE_SIZE_BYTES, DetectionService
 
 
 class _StubModel:
-    """Minimal stand-in for YOLOModel that records what it was given."""
+    """Minimal stand-in for an InferenceBackend that records what it was given."""
 
     def __init__(self) -> None:
         self.calls: list[tuple[int, int]] = []
 
-    def predict(self, image: npt.NDArray[np.uint8]) -> list[dict[str, Any]]:
+    def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
         self.calls.append((image.shape[1], image.shape[0]))
-        return [
-            {
-                "label": "person",
-                "confidence": 0.9,
-                "bbox": {"x_min": 1.0, "y_min": 2.0, "x_max": 3.0, "y_max": 4.0},
-            }
-        ]
+        return [Detection(0, "person", 0.9, 1.0, 2.0, 3.0, 4.0)]
 
 
 def _upload(data: bytes, filename: str = "test.jpg") -> UploadFile:
@@ -53,7 +47,11 @@ async def test_detect_reports_image_dimensions() -> None:
     assert result["metadata"]["image_width"] == 64
     assert result["metadata"]["image_height"] == 32
     assert result["metadata"]["detections_count"] == 1
-    assert result["detections"][0]["label"] == "person"
+    assert result["detections"][0] == {
+        "label": "person",
+        "confidence": 0.9,
+        "bbox": {"x_min": 1.0, "y_min": 2.0, "x_max": 3.0, "y_max": 4.0},
+    }
 
 
 @pytest.mark.asyncio(loop_scope="session")

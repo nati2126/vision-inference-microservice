@@ -1,10 +1,53 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "vision-inference-microservice"
 version = "0.1.0"
-description = "Production-grade object detection inference microservice powered by YOLOv8 and FastAPI"
+description = "YOLOv8 object detection service with interchangeable PyTorch, ONNX Runtime, OpenVINO and TensorRT backends"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "nati2126" }]
+# Version ranges for installing the package. requirements.txt holds the exact
+# pins that Docker and CI install.
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34",
+    "python-multipart>=0.0.20",
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.7,<3",
+    "structlog>=24.4",
+    "numpy>=1.26",
+    "opencv-python-headless>=4.10",
+    # PyTorch baseline backend and the exporter.
+    "ultralytics>=8.3.57,<8.4",
+    "torch>=2.0",
+    # ONNX Runtime backend. The CPU and GPU builds both install the
+    # `onnxruntime` module and cannot coexist: for CUDA, uninstall
+    # `onnxruntime` and install the [gpu] extra instead.
+    "onnxruntime>=1.20",
+    # Graph inspection (precision detection) and export. 1.17 writes IR
+    # version 10, the newest that onnxruntime 1.20 can load.
+    "onnx>=1.17,<1.18",
+]
+
+[project.optional-dependencies]
+gpu = ["onnxruntime-gpu>=1.20"]
+openvino = ["openvino>=2025.0"]
+# Engines are built for one GPU + TensorRT version; see scripts/export_models.py.
+tensorrt = ["tensorrt-cu12>=10.0,<11"]
+bench = ["psutil>=5.9", "nvidia-ml-py>=12.0"]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.25.0",
+    "httpx==0.28.1",
+    "ruff==0.8.6",
+    "mypy==1.14.1",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -32,9 +75,9 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 
-# ultralytics and cv2 ship no py.typed marker / stubs.
+# These ship no py.typed marker / stubs.
 [[tool.mypy.overrides]]
-module = ["ultralytics.*", "cv2.*"]
+module = ["ultralytics.*", "cv2.*", "onnxruntime.*", "openvino.*", "tensorrt.*"]
 ignore_missing_imports = true
 # ultralytics re-exports YOLO from a submodule without an explicit __all__.
 implicit_reexport = true

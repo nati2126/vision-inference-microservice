@@ -12,7 +12,9 @@ from typing import Literal, cast
 import structlog
 
 
-def setup_logging(log_level: str = "INFO", log_format: Literal["json", "console"] = "json") -> None:
+def setup_logging(
+    log_level: str = "INFO", log_format: Literal["json", "console"] = "json"
+) -> None:
     """Configure ``structlog`` and the stdlib root logger.
 
     Args:

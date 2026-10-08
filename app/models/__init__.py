@@ -1,1 +1,1 @@
-"""ML model layer — YOLOv8 loading and inference."""
+"""Model layer: the ``InferenceBackend`` interface and its runtime implementations."""

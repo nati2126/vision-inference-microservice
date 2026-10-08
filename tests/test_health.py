@@ -23,5 +23,15 @@ async def test_health_response_shape(client: AsyncClient) -> None:
     response = await client.get("/api/v1/health")
     body = response.json()
 
-    required_keys = {"status", "version", "model_loaded"}
+    required_keys = {"status", "version", "model_loaded", "backend", "precision", "device"}
     assert required_keys.issubset(body.keys())
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_health_reports_active_backend(client: AsyncClient) -> None:
+    """The default configuration serves the PyTorch FP32 baseline on CPU."""
+    body = (await client.get("/api/v1/health")).json()
+
+    assert body["backend"] == "pytorch"
+    assert body["precision"] == "fp32"
+    assert body["device"] == "cpu"

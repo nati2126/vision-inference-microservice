@@ -17,7 +17,7 @@ from fastapi import UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from app.core.logging import get_logger
-from app.models.yolo_model import YOLOModel
+from app.models.base import InferenceBackend
 
 logger = get_logger(__name__)
 
@@ -32,15 +32,16 @@ class DetectionService:
     """Stateless service that bridges the API and model layers.
 
     Args:
-        model: A loaded ``YOLOModel`` instance (injected via the lifespan
+        model: A loaded ``InferenceBackend`` (injected via the lifespan
             context — never constructed here).
     """
 
-    def __init__(self, model: YOLOModel) -> None:
+    def __init__(self, model: InferenceBackend) -> None:
         self._model = model
-        # Inference runs off the event loop (see ``detect``), but an
-        # ultralytics model instance is not safe to call from several threads
-        # at once, so calls into it are serialised. The lock costs nothing
+        # Inference runs off the event loop (see ``detect``), but backends
+        # are not all safe to call from several threads at once (an
+        # ultralytics model, a single OpenVINO infer request, TensorRT's
+        # pre-bound I/O buffers), so calls into them are serialised. The lock costs nothing
         # while a single request is in flight and prevents interleaved access
         # under concurrency.
         self._inference_lock = asyncio.Lock()
@@ -63,7 +64,7 @@ class DetectionService:
         image = self._decode_image(contents)
 
         # ── Inference ────────────────────────────────────────
-        # ``YOLOModel.predict`` is synchronous and CPU/GPU-bound. Awaiting it
+        # ``InferenceBackend.predict`` is synchronous and CPU/GPU-bound. Awaiting it
         # directly would pin the event loop for the whole inference, stalling
         # every other request on this worker — including health probes. Run it
         # on a worker thread instead so the loop stays responsive.
@@ -82,7 +83,7 @@ class DetectionService:
         )
 
         return {
-            "detections": detections,
+            "detections": [detection.to_dict() for detection in detections],
             "metadata": {
                 "image_width": image.shape[1],
                 "image_height": image.shape[0],

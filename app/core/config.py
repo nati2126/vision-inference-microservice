@@ -9,6 +9,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,10 +33,19 @@ class Settings(BaseSettings):
     port: int = 8000
 
     # ── Model ────────────────────────────────────────────────
-    model_name: str = "yolov8n.pt"
-    model_confidence_threshold: float = 0.25
-    model_device: str = "cpu"  # "cpu" | "cuda" | "mps"
-    # Directory that bare weight filenames are resolved against. Ultralytics
+    # Which runtime executes the network. See app/models/factory.py.
+    model_backend: Literal["pytorch", "onnxruntime", "openvino", "tensorrt"] = "pytorch"
+    # The artifact to load: .pt (pytorch), .onnx (onnxruntime / openvino),
+    # .xml (openvino) or .engine (tensorrt). MODEL_NAME is still accepted
+    # for configs written before backends were selectable.
+    model_path: str = Field(
+        default="yolov8n.pt", validation_alias=AliasChoices("model_path", "model_name")
+    )
+    model_confidence_threshold: float = Field(default=0.25, ge=0.0, le=1.0)
+    model_iou_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    model_max_detections: int = Field(default=300, gt=0)
+    model_device: Literal["cpu", "cuda", "mps"] = "cpu"
+    # Directory that bare .pt filenames are resolved against. Ultralytics
     # downloads a relative filename into the *current working directory*, which
     # is not writable in the container (WORKDIR is root-owned, the process runs
     # as an unprivileged user). Handing it an absolute path under a writable,
