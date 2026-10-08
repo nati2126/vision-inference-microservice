@@ -54,7 +54,10 @@ def preprocess(
     """BGR image -> (1, 3, size, size) RGB float tensor in [0, 1]."""
     padded, info = letterbox(image, size)
     chw = padded[:, :, ::-1].transpose(2, 0, 1)
-    tensor = np.ascontiguousarray(chw, dtype=np.float32)[np.newaxis] / np.float32(255.0)
+    tensor = np.asarray(
+        np.ascontiguousarray(chw, dtype=np.float32)[np.newaxis] / np.float32(255.0),
+        dtype=np.float32,
+    )
     return tensor, info
 
 
