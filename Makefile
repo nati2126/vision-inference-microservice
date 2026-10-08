@@ -1,6 +1,6 @@
 .PHONY: help install dev lint format typecheck test export benchmark benchmark-quick docker-build docker-up docker-down clean
 
-# ── Variables ────────────────────────────────────────────────
+# Variables
 IMAGE_NAME  := vision-inference-microservice
 IMAGE_TAG   := latest
 
@@ -8,7 +8,7 @@ help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
-# ── Local Development ───────────────────────────────────────
+# Local Development
 
 install: ## Install dependencies
 	pip install --upgrade pip
@@ -30,7 +30,7 @@ typecheck: ## Run static type checker (mypy)
 test: ## Run test suite
 	pytest -v --tb=short
 
-# ── Models ───────────────────────────────────────────────────
+# Models
 
 export: ## Export ONNX FP32/INT8 (+ OpenVINO, TensorRT if installed) into models/
 	python -m scripts.export_models
@@ -41,7 +41,7 @@ benchmark: ## Full benchmark of every available backend (~6-10 min)
 benchmark-quick: ## Smoke-run of the benchmark (~2-3 min)
 	python -m benchmark.run_benchmark --quick
 
-# ── Docker ───────────────────────────────────────────────────
+# Docker
 
 docker-build: ## Build Docker image
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
@@ -55,7 +55,7 @@ docker-down: ## Stop service via Docker Compose
 docker-logs: ## Tail service logs
 	docker compose logs -f api
 
-# ── Housekeeping ─────────────────────────────────────────────
+# Housekeeping
 
 clean: ## Remove caches and build artifacts
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

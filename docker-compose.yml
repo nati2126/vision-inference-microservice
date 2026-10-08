@@ -16,9 +16,6 @@ services:
       - MODEL_CONFIDENCE_THRESHOLD=0.25
       - MODEL_DEVICE=cpu
     volumes:
-      # Persist downloaded model weights across container restarts.
-      # MODEL_WEIGHTS_DIR and YOLO_CONFIG_DIR (set in the Dockerfile) both
-      # live under this path, so the weights are downloaded exactly once.
       - model-cache:/home/appuser/.cache
     restart: unless-stopped
     healthcheck:

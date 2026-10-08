@@ -1,4 +1,4 @@
-"""Describe the machine a benchmark ran on, so results are never orphaned from it."""
+"""Hardware description recorded with every benchmark result."""
 
 import importlib.metadata
 import os
@@ -100,7 +100,6 @@ def collect() -> dict[str, Any]:
         "cpu_cores_logical": psutil.cpu_count(logical=True) or os.cpu_count(),
         "ram_gb": round(psutil.virtual_memory().total / 1e9, 1),
         "gpu": gpu_info(),
-        # Laptops throttle on battery; a result taken unplugged is not comparable.
         "on_ac_power": None if battery is None else bool(battery.power_plugged),
         "python": platform.python_version(),
         "packages": versions,

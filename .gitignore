@@ -1,4 +1,4 @@
-# ── Python ───────────────────────────────────────────────────
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -8,33 +8,33 @@ dist/
 build/
 .eggs/
 
-# ── Virtual environment ──────────────────────────────────────
+# Virtual environment
 .venv/
 venv/
 env/
 
-# ── IDE ──────────────────────────────────────────────────────
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# ── Environment ──────────────────────────────────────────────
+# Environment
 .env
 
-# ── Docker ───────────────────────────────────────────────────
+# Docker
 docker-compose.override.yml
 
-# ── ML Models (downloaded at runtime) ────────────────────────
+# ML Models (downloaded at runtime)
 *.pt
 *.onnx
 runs/
 
-# ── OS ───────────────────────────────────────────────────────
+# OS
 .DS_Store
 Thumbs.db
 
-# ── Testing / Coverage ──────────────────────────────────────
+# Testing / Coverage
 .pytest_cache/
 .coverage
 htmlcov/

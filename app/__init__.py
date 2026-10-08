@@ -1,1 +1,1 @@
-"""Vision Inference Microservice — FastAPI application package."""
+"""Vision inference microservice."""

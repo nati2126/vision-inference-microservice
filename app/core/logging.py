@@ -1,9 +1,4 @@
-"""Structured logging configuration using ``structlog``.
-
-In production, logs are emitted as JSON lines (machine-parsable for ELK /
-Datadog / CloudWatch). In development, a human-friendly console renderer is
-used instead. The format is controlled by the ``LOG_FORMAT`` env var.
-"""
+"""structlog setup: JSON lines or a console renderer."""
 
 import logging
 import sys
@@ -15,13 +10,6 @@ import structlog
 def setup_logging(
     log_level: str = "INFO", log_format: Literal["json", "console"] = "json"
 ) -> None:
-    """Configure ``structlog`` and the stdlib root logger.
-
-    Args:
-        log_level: Minimum severity (DEBUG, INFO, WARNING, ERROR, CRITICAL).
-        log_format: ``"json"`` for machine-readable output, ``"console"`` for
-            coloured, human-friendly output.
-    """
     shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
@@ -61,17 +49,9 @@ def setup_logging(
     root_logger.addHandler(handler)
     root_logger.setLevel(log_level.upper())
 
-    # Quieten noisy third-party loggers
     for noisy in ("uvicorn.access", "ultralytics"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    """Return a named, bound logger instance.
-
-    Args:
-        name: Logger name — typically ``__name__`` of the calling module.
-    """
-    # ``structlog.get_logger`` is typed as returning ``Any``; the configured
-    # ``wrapper_class`` above guarantees a stdlib ``BoundLogger``.
     return cast(structlog.stdlib.BoundLogger, structlog.get_logger(name))

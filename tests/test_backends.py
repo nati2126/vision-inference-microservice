@@ -1,12 +1,4 @@
-"""Every backend: same output schema, correct precision, and parity with a reference.
-
-The reference is ONNX Runtime FP32 on CPU, i.e. the same network weights run
-through the shared NumPy pre/post-processing. Each other backend must find
-the same confident objects within a tolerance that fits its precision.
-
-Backends whose package, artifact or GPU is unavailable are skipped; CI runs
-the PyTorch and ONNX Runtime FP32 CPU cases.
-"""
+"""Every available backend: shared schema, precision, and parity with ONNX Runtime FP32 CPU."""
 
 import importlib.util
 from collections.abc import Iterator
@@ -27,32 +19,23 @@ from tests.conftest import MODELS_DIR
 
 @dataclass(frozen=True)
 class Case:
-    """A backend under test and how closely it must match the reference."""
-
     id: str
     backend: str
     device: str
-    artifact: str  # path relative to models/
+    artifact: str
     precision: str
-    # Tolerances, set at roughly twice the worst case measured on bus.jpg
-    # and zidane.jpg (see the PR / README for the measurements).
     min_iou: float
     max_conf_diff: float
     package: str
 
 
+# Tolerances are about twice the worst case measured on bus.jpg and zidane.jpg.
 CASES = [
-    # PyTorch letterboxes to a minimal rectangle (e.g. 640x480) instead of
-    # the exported models' fixed 640x640, so its inputs differ slightly.
-    # Measured worst case: IoU 0.950, confidence 0.058.
     Case("pytorch-cpu", "pytorch", "cpu", "yolov8n.pt", "fp32", 0.90, 0.10, "torch"),
-    # Same graph, different kernels: measured IoU >= 0.9996, conf <= 0.0005.
     Case("onnxruntime-cpu-fp32", "onnxruntime", "cpu", "yolov8n.onnx", "fp32", 0.99, 0.01, "onnxruntime"),
     Case("onnxruntime-cuda-fp32", "onnxruntime", "cuda", "yolov8n.onnx", "fp32", 0.99, 0.01, "onnxruntime"),
     Case("openvino-cpu-fp32", "openvino", "cpu", "yolov8n_openvino/yolov8n.xml", "fp32", 0.99, 0.01, "openvino"),
-    # FP16: measured IoU >= 0.999, conf <= 0.0018.
     Case("tensorrt-cuda-fp16", "tensorrt", "cuda", "yolov8n_fp16.engine", "fp16", 0.98, 0.02, "tensorrt"),
-    # INT8: measured IoU >= 0.974, conf <= 0.049.
     Case("onnxruntime-cpu-int8", "onnxruntime", "cpu", "yolov8n_int8.onnx", "int8", 0.90, 0.10, "onnxruntime"),
     Case("openvino-cpu-int8", "openvino", "cpu", "yolov8n_int8_openvino/yolov8n_int8.xml", "int8", 0.90, 0.10, "openvino"),
 ]  # fmt: skip
@@ -70,7 +53,6 @@ def _cuda_available() -> bool:
 def case_and_backend(
     request: pytest.FixtureRequest, onnx_fp32_path: Path, pt_path: Path
 ) -> Iterator[tuple[Case, InferenceBackend]]:
-    """Each available backend, loaded once for the whole session."""
     case: Case = request.param
     if importlib.util.find_spec(case.package) is None:
         pytest.skip(f"{case.package} is not installed")
@@ -93,9 +75,6 @@ def reference(onnx_fp32_path: Path) -> InferenceBackend:
     return backend
 
 
-# ── Schema ───────────────────────────────────────────────────
-
-
 def test_backend_returns_the_shared_detection_schema(
     case_and_backend: tuple[Case, InferenceBackend], bus_image: npt.NDArray[np.uint8]
 ) -> None:
@@ -112,7 +91,6 @@ def test_backend_returns_the_shared_detection_schema(
         assert backend.confidence_threshold <= det.confidence <= 1.0
         assert 0 <= det.x_min < det.x_max <= width
         assert 0 <= det.y_min < det.y_max <= height
-        # Serialises into the API's response model without error.
         DetectionSchema(**det.to_dict())
 
     labels = [d.label for d in detections]
@@ -129,17 +107,9 @@ def test_backend_reports_precision_from_the_artifact(
     assert backend.name == case.backend
 
 
-# ── Parity ───────────────────────────────────────────────────
-
-
 def _assert_confident_detections_match(
     expected: list[Detection], actual: list[Detection], min_iou: float, max_conf_diff: float
 ) -> None:
-    """Every detection >= 0.5 in ``expected`` has a same-class twin in ``actual``.
-
-    Candidates are drawn from everything ``actual`` returned (>= 0.25), so a
-    box sitting just below 0.5 on one side does not fail spuriously.
-    """
     for want in (d for d in expected if d.confidence >= 0.5):
         same_class = [d for d in actual if d.class_id == want.class_id]
         assert same_class, f"no {want.label} found to match {want}"
@@ -165,7 +135,6 @@ def test_backend_matches_onnx_fp32_reference(
 
     want, got = reference.predict(image), backend.predict(image)
 
-    # Both directions: nothing confident is missing, nothing confident is extra.
     _assert_confident_detections_match(want, got, case.min_iou, case.max_conf_diff)
     _assert_confident_detections_match(got, want, case.min_iou, case.max_conf_diff)
 
@@ -173,11 +142,6 @@ def test_backend_matches_onnx_fp32_reference(
 def test_numpy_pipeline_matches_ultralytics_on_the_same_onnx_file(
     reference: InferenceBackend, onnx_fp32_path: Path, bus_image: npt.NDArray[np.uint8]
 ) -> None:
-    """Our letterbox/decode/NMS reproduces ultralytics' own ONNX path.
-
-    Same file, same runtime, so any difference would be a pre/post-processing
-    bug; the tolerance only absorbs float rounding.
-    """
     import torch
     from ultralytics import YOLO
 
@@ -207,9 +171,6 @@ def test_numpy_pipeline_matches_ultralytics_on_the_same_onnx_file(
         assert cls_a == int(cls_b)
         assert conf_a == pytest.approx(conf_b, abs=1e-4)
         np.testing.assert_allclose(box_a, box_b, atol=0.05)
-
-
-# ── Construction errors ──────────────────────────────────────
 
 
 def test_unknown_backend_is_rejected() -> None:

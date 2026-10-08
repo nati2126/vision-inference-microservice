@@ -19,21 +19,13 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      # requirements.txt pins `torch>=2.0.0`, which resolves to the CUDA build
-      # on PyPI and drags in several GB of nvidia wheels. The runner has no
-      # GPU, so install the CPU build first; the next step then sees the
-      # requirement already satisfied.
+      # Avoids pulling the CUDA build and its nvidia wheels.
       - name: Install CPU-only torch
         run: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 
-      # CPU scope only: PyTorch + ONNX Runtime. OpenVINO and TensorRT are
-      # optional extras; their tests skip when the package is absent.
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # yolov8n.pt is downloaded on first model load (MODEL_WEIGHTS_DIR), and
-      # the test fixtures export models/yolov8n{.pt,.onnx} when missing.
-      # Caching both keeps the suite off the network on most runs.
       - name: Cache model weights and exports
         uses: actions/cache@v4
         with:
@@ -43,8 +35,6 @@ jobs:
           key: models-${{ hashFiles('requirements.txt', 'scripts/export_models.py') }}
           restore-keys: models-
 
-      # mypy follows torch's very large stubs; a warm cache cuts the check
-      # from minutes to seconds.
       - name: Cache mypy
         uses: actions/cache@v4
         with:
@@ -73,9 +63,6 @@ jobs:
       - name: Build image
         run: docker build -t vision-inference:ci .
 
-      # Proves the service actually starts as the non-root user: ultralytics
-      # writes model weights on first load, and the working directory is not
-      # writable by that user.
       - name: Start container
         run: docker run -d --name vision-ci -p 8000:8000 vision-inference:ci
 

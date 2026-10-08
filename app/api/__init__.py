@@ -1,1 +1,1 @@
-"""API layer — route definitions."""
+"""API layer."""

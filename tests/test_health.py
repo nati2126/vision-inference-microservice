@@ -1,4 +1,4 @@
-"""Tests for the health-check endpoint."""
+"""/health endpoint."""
 
 import pytest
 from httpx import AsyncClient
@@ -6,7 +6,6 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_health_returns_200(client: AsyncClient) -> None:
-    """GET /api/v1/health should return 200 with expected fields."""
     response = await client.get("/api/v1/health")
 
     assert response.status_code == 200
@@ -19,7 +18,6 @@ async def test_health_returns_200(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_health_response_shape(client: AsyncClient) -> None:
-    """Verify the response body matches the HealthResponse schema."""
     response = await client.get("/api/v1/health")
     body = response.json()
 
@@ -29,7 +27,6 @@ async def test_health_response_shape(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_health_reports_active_backend(client: AsyncClient) -> None:
-    """The default configuration serves the PyTorch FP32 baseline on CPU."""
     body = (await client.get("/api/v1/health")).json()
 
     assert body["backend"] == "pytorch"

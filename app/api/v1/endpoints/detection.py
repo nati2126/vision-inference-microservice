@@ -1,8 +1,4 @@
-"""Object detection endpoint.
-
-Accepts an image upload and returns detected objects with bounding boxes,
-class labels, and confidence scores.
-"""
+"""POST /detect."""
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile, status
 
@@ -37,12 +33,6 @@ async def detect_objects(
     request: Request,
     file: UploadFile,
 ) -> DetectionResponse:
-    """Run YOLOv8 inference on the uploaded image.
-
-    The route handler is intentionally thin — all business logic lives in
-    ``DetectionService``.
-    """
-    # ── Content-type guard ───────────────────────────────────
     if file.content_type not in _ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -1,15 +1,4 @@
-"""Application factory — creates and configures the FastAPI app.
-
-Uses the modern ``lifespan`` context manager pattern (FastAPI ≥ 0.95)
-instead of the deprecated ``on_event("startup")`` / ``on_event("shutdown")``
-decorators. The lifespan manager is responsible for:
-
-1. Loading configuration
-2. Initialising structured logging
-3. Building and loading the configured inference backend (once)
-4. Creating service instances
-5. Tearing everything down gracefully on shutdown
-"""
+"""FastAPI application factory and lifespan."""
 
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -31,15 +20,8 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Manage application startup and shutdown lifecycle.
-
-    Everything before ``yield`` runs at startup; everything after runs at
-    shutdown. Objects attached to ``app.state`` are available to all
-    request handlers via ``request.app.state``.
-    """
     settings = get_settings()
 
-    # ── Logging ──────────────────────────────────────────────
     setup_logging(log_level=settings.log_level, log_format=settings.log_format)
     logger.info(
         "application_starting",
@@ -47,7 +29,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         environment=settings.environment,
     )
 
-    # ── Model ────────────────────────────────────────────────
     model = create_backend(
         settings.model_backend,
         model_path=settings.model_path,
@@ -59,10 +40,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     model.load()
 
-    # ── Services ─────────────────────────────────────────────
     detection_service = DetectionService(model=model)
 
-    # ── Attach to app state (dependency injection) ───────────
     app.state.settings = settings
     app.state.model = model
     app.state.detection_service = detection_service
@@ -70,20 +49,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("application_ready")
     yield
 
-    # ── Shutdown ─────────────────────────────────────────────
     logger.info("application_shutting_down")
     model.unload()
     logger.info("application_stopped")
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    """Make error responses match the documented ``ErrorResponse`` schema.
-
-    FastAPI's defaults return ``{"detail": ...}``, while the endpoints
-    advertise ``ErrorResponse`` (``{"error": ..., "detail": ...}``) for their
-    4xx / 5xx responses. Without these handlers the OpenAPI contract and the
-    actual payloads disagree.
-    """
+    """Return every error in the ``ErrorResponse`` shape."""
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -107,7 +79,6 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-        # Never leak internals to the caller; the traceback goes to the logs.
         logger.exception("unhandled_exception", path=request.url.path)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -116,7 +87,6 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 
 def create_app() -> FastAPI:
-    """Application factory — returns a fully configured FastAPI instance."""
     settings = get_settings()
 
     app = FastAPI(
@@ -131,11 +101,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ── Middleware ────────────────────────────────────────────
     allow_credentials = settings.cors_allow_credentials
     if allow_credentials and "*" in settings.cors_allow_origins:
-        # Browsers refuse a credentialed response carrying the wildcard
-        # origin, so this combination silently breaks every such request.
+        # Browsers reject credentialed responses with a wildcard origin.
         logger.warning(
             "cors_credentials_disabled_for_wildcard_origin",
             hint="Set CORS_ALLOW_ORIGINS to an explicit list to use credentials.",
@@ -150,14 +118,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # ── Error handling ───────────────────────────────────────
     register_exception_handlers(app)
 
-    # ── Routers ──────────────────────────────────────────────
     app.include_router(v1_router)
 
     return app
 
 
-# Uvicorn entry point
 app = create_app()

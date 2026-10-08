@@ -1,26 +1,4 @@
-"""COCO-style mean average precision, written out so it can be explained.
-
-Every backend is scored by this one function with identical inputs, so any
-difference in the numbers comes from the backend, not the evaluation.
-
-The procedure, for each IoU threshold t in 0.50, 0.55, ..., 0.95:
-
-1. Matching (per image, per class): walk the predictions from most to
-   least confident. Each one claims the not-yet-claimed ground-truth box it
-   overlaps most; if that overlap is at least t it is a true positive,
-   otherwise a false positive. A ground-truth box can be claimed only once,
-   so duplicate detections of one object count against the model.
-2. Precision-recall curve (per class, over all images): sort every
-   prediction by confidence and accumulate TPs and FPs. Each prefix of the
-   list is one operating point: precision = TP / (TP + FP),
-   recall = TP / number of ground-truth boxes.
-3. Average precision: make precision monotonically non-increasing in
-   recall (the "envelope"), sample it at 101 recall levels 0.00 .. 1.00 and
-   average, as pycocotools does.
-
-mAP50 is the mean AP over classes at t = 0.50; mAP50-95 also averages over
-the ten thresholds. Classes with no ground truth in the dataset are skipped.
-"""
+"""COCO-style mAP50 and mAP50-95 (greedy matching, 101-point interpolation)."""
 
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -57,10 +35,8 @@ def average_precision(
     recall = tp / num_gt
     precision = tp / (tp + fp)
 
-    # Envelope: the best precision achievable at this recall *or higher*.
     precision = np.maximum.accumulate(precision[::-1])[::-1]
 
-    # For each recall level r, the precision at the first point reaching r.
     idx = np.searchsorted(recall, _RECALL_LEVELS, side="left")
     sampled = np.where(idx < len(precision), precision[np.minimum(idx, len(precision) - 1)], 0.0)
     return float(sampled.mean())
@@ -70,7 +46,6 @@ def average_precision(
 class DetectionEvaluator:
     """Accumulates per-image results, then reports mAP50 and mAP50-95."""
 
-    # class id -> list of (score, tp flags at each IoU threshold)
     _scores: dict[int, list[float]] = field(default_factory=lambda: defaultdict(list))
     _hits: dict[int, list[npt.NDArray[np.bool_]]] = field(
         default_factory=lambda: defaultdict(list)

@@ -1,10 +1,4 @@
-"""The coco128 dataset: download, and read images with their ground truth.
-
-coco128 is the first 128 images of COCO train2017 with YOLO-format labels.
-It is small enough to evaluate every backend in seconds, which is why it is
-used here, and also why its mAP is only a relative comparison between
-backends, not a substitute for a full COCO val2017 evaluation.
-"""
+"""coco128 download and ground-truth loading."""
 
 import io
 import urllib.request
@@ -44,7 +38,6 @@ def ensure_coco128(root: Path = DEFAULT_ROOT) -> Path:
 
     resolved_root = root.resolve()
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-        # Refuse any member that would land outside ``root`` ("zip slip").
         for member in archive.namelist():
             target = (root / member).resolve()
             if not target.is_relative_to(resolved_root):
@@ -67,11 +60,7 @@ def label_path_for(dataset_dir: Path, image_path: Path) -> Path:
 def load_labels(
     label_path: Path, width: int, height: int
 ) -> tuple[npt.NDArray[np.float32], npt.NDArray[np.int64]]:
-    """Read a YOLO label file and convert it to pixel xyxy boxes.
-
-    Each line is ``class cx cy w h`` with coordinates normalised to [0, 1].
-    Images without a label file are background images with no objects.
-    """
+    """YOLO label file (class cx cy w h, normalised) -> pixel xyxy boxes."""
     if not label_path.exists():
         return np.zeros((0, 4), np.float32), np.zeros(0, np.int64)
 

@@ -1,1 +1,1 @@
-"""API v1 — versioned route group."""
+"""API v1."""

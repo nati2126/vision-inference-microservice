@@ -1,1 +1,1 @@
-"""Service layer — detection business logic."""
+"""Service layer."""

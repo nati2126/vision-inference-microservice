@@ -1,1 +1,1 @@
-"""Core utilities — configuration, logging, and application lifecycle."""
+"""Configuration and logging."""

@@ -1,17 +1,9 @@
-"""PyTorch backend: the original ultralytics pipeline, kept as the baseline.
-
-Everything else in the benchmark is measured against this. It is also the
-only backend that still uses ultralytics at inference time; its pre- and
-post-processing are ultralytics' own, which is what makes it a useful
-reference for the parity test against :mod:`app.models.processing`.
-"""
+"""PyTorch backend via ultralytics; the baseline the other backends are compared to."""
 
 import os
 from pathlib import Path
 
-# Ultralytics pip-installs packages it decides are missing, at runtime, by
-# default. A service must never mutate its own environment; fail instead.
-# Read when ultralytics is first imported, so it has to be set before that.
+# Stop ultralytics from pip-installing packages at runtime. Must precede its import.
 os.environ.setdefault("YOLO_AUTOINSTALL", "false")
 
 import numpy as np
@@ -26,14 +18,6 @@ logger = get_logger(__name__)
 
 
 class PyTorchBackend(InferenceBackend):
-    """YOLOv8 through ``ultralytics.YOLO`` on CPU, CUDA or MPS.
-
-    Args:
-        weights_dir: Directory that a bare weight filename resolves against.
-        input_size: Long side of the network input.
-        (others): See :class:`InferenceBackend`.
-    """
-
     name = "pytorch"
 
     def __init__(
@@ -50,27 +34,11 @@ class PyTorchBackend(InferenceBackend):
         self.weights_dir = weights_dir
         self.input_size = input_size
         self._model: YOLO | None = None
-        # Hand ultralytics a ``torch.device``, never a string. Given the
-        # string "cpu", ``select_device`` sets CUDA_VISIBLE_DEVICES=-1 for the
-        # whole process and then queries CUDA, which caches "no GPU" for the
-        # process lifetime, breaking any other CUDA user (ONNX Runtime,
-        # TensorRT) in the same process. A ``torch.device`` short-circuits it.
+        # A "cpu" string makes ultralytics set CUDA_VISIBLE_DEVICES=-1 process-wide.
         self._torch_device = torch.device("cuda:0" if device == "cuda" else device)
 
-    # ── Lifecycle ────────────────────────────────────────────
-
     def _resolve_weights(self) -> str:
-        """Return the path to hand to ultralytics.
-
-        A bare filename (``yolov8n.pt``) is resolved against ``weights_dir``.
-        Ultralytics downloads a *relative* filename into the current working
-        directory; in the container that is the root-owned ``/app``, so an
-        unprivileged process gets ``PermissionError`` on first start. An
-        absolute path avoids that and lets the weights persist on a volume.
-
-        An explicit path in ``model_path`` (absolute, or containing a
-        separator) is passed through untouched.
-        """
+        # Bare filenames go to weights_dir; ultralytics would otherwise download into the CWD.
         candidate = Path(self.model_path)
         if self.weights_dir is None or candidate.is_absolute() or candidate.parent != Path("."):
             return self.model_path
@@ -79,26 +47,17 @@ class PyTorchBackend(InferenceBackend):
         return str(self.weights_dir / candidate.name)
 
     def load(self) -> None:
-        """Load model weights and run one warm-up inference."""
         weights = self._resolve_weights()
         logger.info("loading_model", backend=self.name, weights_path=weights, device=self.device)
         self._model = YOLO(weights)
-        # Warm-up: the first call pays for CUDA context creation, cuDNN
-        # autotuning and lazy allocations. Paying it here keeps it off the
-        # first real request.
-        dummy = np.zeros((self.input_size, self.input_size, 3), dtype=np.uint8)
-        self.predict(dummy)
+        self.predict(np.zeros((self.input_size, self.input_size, 3), dtype=np.uint8))
         logger.info("model_loaded", backend=self.name, precision=self.precision)
 
     def unload(self) -> None:
-        """Release model resources."""
         self._model = None
         logger.info("model_unloaded", backend=self.name)
 
-    # ── Inference ────────────────────────────────────────────
-
     def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
-        """Run detection on a BGR ``(H, W, 3)`` image."""
         if self._model is None:
             raise RuntimeError("Model is not loaded. Call .load() first.")
 
@@ -117,9 +76,6 @@ class PyTorchBackend(InferenceBackend):
             boxes = result.boxes
             if boxes is None:
                 continue
-            # Read the batched tensors once rather than iterating ``Boxes``:
-            # fewer host/device round-trips, and ``Boxes`` is not typed as
-            # iterable so strict mypy rejects the per-box loop.
             coords: list[list[float]] = boxes.xyxy.tolist()
             confidences: list[float] = boxes.conf.tolist()
             class_ids: list[float] = boxes.cls.tolist()
@@ -141,10 +97,8 @@ class PyTorchBackend(InferenceBackend):
 
     @property
     def is_loaded(self) -> bool:
-        """Check whether the model weights are currently in memory."""
         return self._model is not None
 
     @property
     def precision(self) -> str:
-        """Ultralytics runs ``.pt`` weights in FP32 unless ``half=True`` is passed."""
         return "fp32"

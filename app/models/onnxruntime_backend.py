@@ -1,8 +1,4 @@
-"""ONNX Runtime backend: CPU or CUDA, FP32 or INT8, no ultralytics at inference.
-
-The network runs inside an ``onnxruntime.InferenceSession``; letterboxing,
-decoding and NMS come from :mod:`app.models.processing`.
-"""
+"""ONNX Runtime backend (CPU or CUDA, FP32 or INT8)."""
 
 import contextlib
 import importlib
@@ -26,14 +22,7 @@ _PROVIDERS = {
 
 
 def _preload_cuda_libraries() -> None:
-    """Make the CUDA / cuDNN shared libraries visible to ONNX Runtime.
-
-    The CUDA execution provider loads cuBLAS and cuDNN at session creation
-    but does not ship them. The torch wheel bundles both, and importing torch
-    loads them into the process, where ORT then finds them. Without torch,
-    newer onnxruntime releases can locate the ``nvidia-*`` pip packages via
-    ``preload_dlls``. If neither works, ``load`` fails loudly below.
-    """
+    # The CUDA provider needs cuBLAS/cuDNN; importing torch loads its bundled copies.
     try:
         importlib.import_module("torch")
     except ImportError:
@@ -44,8 +33,6 @@ def _preload_cuda_libraries() -> None:
 
 
 class OnnxRuntimeBackend(InferenceBackend):
-    """YOLOv8 exported to ONNX, executed by ONNX Runtime."""
-
     name = "onnxruntime"
 
     def __init__(
@@ -66,22 +53,17 @@ class OnnxRuntimeBackend(InferenceBackend):
         self._precision = "unknown"
 
     def load(self) -> None:
-        """Create the session, verify the provider, and warm up."""
         logger.info("loading_model", backend=self.name, path=self.model_path, device=self.device)
         if self.device == "cuda":
             _preload_cuda_libraries()
 
         options = ort.SessionOptions()
-        # Constant folding, node fusion (Conv+BN+activation) and layout
-        # optimisations are applied once here, when the session is built.
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         session = ort.InferenceSession(
             self.model_path, sess_options=options, providers=_PROVIDERS[self.device]
         )
 
-        # ORT does not raise when a requested provider fails to initialise;
-        # it logs a warning and silently runs on CPU. Benchmarking that as
-        # "CUDA" would be wrong, so treat a fallback as a hard error.
+        # ORT silently falls back to CPU when a provider fails to initialise.
         requested = _PROVIDERS[self.device][0]
         if session.get_providers()[0] != requested:
             raise RuntimeError(
@@ -91,8 +73,6 @@ class OnnxRuntimeBackend(InferenceBackend):
 
         model_input = session.get_inputs()[0]
         self._input_name = model_input.name
-        # Static export: shape is [1, 3, H, W]. A dynamic axis shows up as a
-        # string, in which case fall back to the standard 640.
         height = model_input.shape[2]
         self._input_size = height if isinstance(height, int) else 640
         self._labels = parse_names(session.get_modelmeta().custom_metadata_map.get("names"))
@@ -103,12 +83,10 @@ class OnnxRuntimeBackend(InferenceBackend):
         logger.info("model_loaded", backend=self.name, precision=self._precision)
 
     def unload(self) -> None:
-        """Drop the session (and with it any device memory)."""
         self._session = None
         logger.info("model_unloaded", backend=self.name)
 
     def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
-        """Run detection on a BGR ``(H, W, 3)`` image."""
         if self._session is None:
             raise RuntimeError("Model is not loaded. Call .load() first.")
 

@@ -1,8 +1,4 @@
-"""V1 router — aggregates all v1 endpoint routers.
-
-Adding a new endpoint group is a one-liner:
-    ``router.include_router(new_router, prefix="/new", tags=["new"])``
-"""
+"""API v1 router."""
 
 from fastapi import APIRouter
 

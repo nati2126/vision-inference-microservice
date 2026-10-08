@@ -1,8 +1,4 @@
-"""Health-check endpoint.
-
-Used by Docker HEALTHCHECK, Kubernetes liveness / readiness probes, and
-load balancers to determine if the service is operational.
-"""
+"""GET /health."""
 
 from fastapi import APIRouter, Request
 
@@ -19,7 +15,6 @@ router = APIRouter()
     description="Returns service status, version, model readiness and the active backend.",
 )
 async def health_check(request: Request) -> HealthResponse:
-    """Return current service health status."""
     model: InferenceBackend = request.app.state.model
     settings = request.app.state.settings
 

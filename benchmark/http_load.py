@@ -1,10 +1,4 @@
-"""End-to-end HTTP benchmark: start the real service, load it with httpx.
-
-This measures what a client sees: multipart upload, JPEG decode, inference,
-JSON serialisation and the event loop, not just ``predict()``. The client
-runs on the same machine as the server and competes with it for CPU, which
-is noted alongside the results.
-"""
+"""End-to-end HTTP benchmark against a real uvicorn process."""
 
 import asyncio
 import os
@@ -79,15 +73,7 @@ class ServiceProcess:
         return "\n".join(text.splitlines()[-lines:])
 
     def stop(self) -> None:
-        """Stop the server and wait until it has really exited.
-
-        On Windows a venv's ``python.exe`` is a launcher that runs the real
-        interpreter as a child; terminating the launcher ends that child a
-        moment later. The child holds the log file open, so the log becoming
-        deletable is the signal that the server is gone, and the next
-        backend never starts while the previous one still holds CPU or GPU
-        resources.
-        """
+        # On Windows the venv launcher's child holds the log open until it exits.
         if self._process is not None and self._process.poll() is None:
             self._process.terminate()
             try:
@@ -126,7 +112,7 @@ async def _run_load(
         async def worker() -> None:
             nonlocal remaining, errors
             while remaining > 0:
-                remaining -= 1  # no await between check and decrement: race-free
+                remaining -= 1
                 start = time.perf_counter()
                 response = await client.post(url, files={"file": files_template})
                 latencies_ms.append((time.perf_counter() - start) * 1000)
