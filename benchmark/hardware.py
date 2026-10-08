@@ -23,6 +23,15 @@ _PACKAGES = (
 )
 
 
+def os_name() -> str:
+    """OS and version. ``platform.release()`` says "10" on Windows 11."""
+    if sys.platform == "win32":
+        build = int(platform.version().split(".")[-1])
+        release = "11" if build >= 22000 else platform.release()
+        return f"Windows {release} (build {platform.version()})"
+    return f"{platform.system()} {platform.release()}"
+
+
 def cpu_name() -> str:
     """Marketing name of the CPU, e.g. "Intel(R) Core(TM) i9-14900HX"."""
     if sys.platform == "win32":
@@ -85,7 +94,7 @@ def collect() -> dict[str, Any]:
     ).stdout.strip()
 
     return {
-        "os": f"{platform.system()} {platform.release()} ({platform.version()})",
+        "os": os_name(),
         "cpu": cpu_name(),
         "cpu_cores_physical": psutil.cpu_count(logical=False),
         "cpu_cores_logical": psutil.cpu_count(logical=True) or os.cpu_count(),
