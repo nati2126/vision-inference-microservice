@@ -77,7 +77,7 @@ disallow_untyped_defs = true
 
 # These ship no py.typed marker / stubs.
 [[tool.mypy.overrides]]
-module = ["ultralytics.*", "cv2.*", "onnxruntime.*", "openvino.*", "tensorrt.*"]
+module = ["ultralytics.*", "cv2.*", "onnxruntime.*", "openvino.*", "tensorrt.*", "pynvml.*", "psutil.*"]
 ignore_missing_imports = true
 # ultralytics re-exports YOLO from a submodule without an explicit __all__.
 implicit_reexport = true
