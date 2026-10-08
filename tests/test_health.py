@@ -35,3 +35,12 @@ async def test_health_reports_active_backend(client: AsyncClient) -> None:
     assert body["backend"] == "pytorch"
     assert body["precision"] == "fp32"
     assert body["device"] == "cpu"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_health_reports_onnxruntime_backend(onnx_client: AsyncClient) -> None:
+    body = (await onnx_client.get("/api/v1/health")).json()
+
+    assert body["status"] == "healthy"
+    assert body["backend"] == "onnxruntime"
+    assert body["precision"] == "fp32"
