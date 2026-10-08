@@ -1,7 +1,7 @@
 # Benchmark results (full run)
 
-- **Hardware:** Intel(R) Core(TM) i9-14900HX (24 cores / 32 threads), 34.1 GB RAM, NVIDIA GeForce RTX 4070 Laptop GPU (8.6 GB), Windows 10 (10.0.26200), Python 3.11.14, on AC power
-- **Generated:** 2026-10-08T09:14:54+00:00, commit `da3835c`, took 388s
+- **Hardware:** Intel(R) Core(TM) i9-14900HX (24 cores / 32 threads), 34.1 GB RAM, NVIDIA GeForce RTX 4070 Laptop GPU (8.6 GB), Windows 11 (build 10.0.26200), Python 3.11.14, on AC power
+- **Generated:** 2026-10-08T09:32:33+00:00, commit `1dd7e01`, took 378s
 - **Accuracy:** coco128 (first 128 images of COCO train2017), 128 images, conf 0.001, NMS IoU 0.7. A relative comparison between backends, not an official COCO result.
 - **Latency:** `predict()` end to end (preprocess + inference + postprocess), batch 1, 10 warm-up + 100 timed runs on one 640x480 image, serving thresholds (conf 0.25).
 - **HTTP:** 200 `POST /api/v1/detect` requests per concurrency level against uvicorn (1 worker); client and server share the machine.
@@ -10,25 +10,25 @@
 
 | Backend | Device | Precision | mAP50 | mAP50-95 | Mean ms | p50 ms | p95 ms | img/s | Size MB | Peak RSS MB | Peak GPU MB |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| pytorch | cpu | fp32 | 0.607 | 0.448 | 98.07 | 96.73 | 110.37 | 10.2 | 6.5 | 753 | n/a |
-| pytorch | cuda | fp32 | 0.607 | 0.448 | 22.75 | 22.42 | 24.39 | 44.0 | 6.5 | 1382 | 357 |
-| onnxruntime | cpu | fp32 | 0.594 | 0.444 | 42.77 | 42.48 | 45.17 | 23.4 | 12.8 | 170 | n/a |
-| onnxruntime | cpu | int8 | 0.581 | 0.430 | 52.31 | 52.69 | 53.88 | 19.1 | 3.7 | 142 | n/a |
-| onnxruntime | cuda | fp32 | 0.594 | 0.443 | 19.78 | 19.59 | 21.47 | 50.6 | 12.8 | 1153 | 221 |
-| openvino | cpu | fp32 | 0.594 | 0.444 | 46.89 | 46.79 | 52.70 | 21.3 | 12.9 | 186 | n/a |
-| openvino | cpu | int8 | 0.577 | 0.430 | 33.22 | 31.97 | 40.90 | 30.1 | 4.4 | 207 | n/a |
-| tensorrt | cuda | fp16 | 0.595 | 0.444 | 13.25 | 13.23 | 13.85 | 75.5 | 9.4 | 805 | 242 |
-| onnxruntime (ablation: naive INT8) | cpu | int8 | 0.000 | 0.000 | n/a | n/a | n/a | n/a | 3.6 | 127 | n/a |
+| pytorch | cpu | fp32 | 0.607 | 0.448 | 92.61 | 91.65 | 100.75 | 10.8 | 6.5 | 751 | n/a |
+| pytorch | cuda | fp32 | 0.607 | 0.448 | 22.77 | 22.48 | 25.65 | 43.9 | 6.5 | 1379 | 357 |
+| onnxruntime | cpu | fp32 | 0.594 | 0.444 | 40.44 | 40.60 | 42.27 | 24.7 | 12.8 | 172 | n/a |
+| onnxruntime | cpu | int8 | 0.581 | 0.430 | 51.36 | 52.37 | 53.28 | 19.5 | 3.7 | 142 | n/a |
+| onnxruntime | cuda | fp32 | 0.594 | 0.443 | 18.99 | 18.79 | 20.52 | 52.7 | 12.8 | 1152 | 221 |
+| openvino | cpu | fp32 | 0.594 | 0.444 | 45.33 | 44.55 | 54.26 | 22.1 | 12.9 | 182 | n/a |
+| openvino | cpu | int8 | 0.577 | 0.430 | 32.17 | 30.09 | 40.67 | 31.1 | 4.4 | 209 | n/a |
+| tensorrt | cuda | fp16 | 0.595 | 0.444 | 13.84 | 13.92 | 15.00 | 72.2 | 9.4 | 807 | 242 |
+| onnxruntime (ablation: naive INT8) | cpu | int8 | 0.000 | 0.000 | n/a | n/a | n/a | n/a | 3.6 | 128 | n/a |
 
 ## HTTP
 
 | Backend | Device | Precision | c=1 p50 ms | c=1 p95 ms | c=1 req/s | c=8 p50 ms | c=8 p95 ms | c=8 req/s |
 |---|---|---|---:|---:|---:|---:|---:|---:|
-| pytorch | cpu | fp32 | 124.3 | 143.1 | 8.0 | 826.4 | 880.5 | 9.6 |
-| pytorch | cuda | fp32 | 31.8 | 35.4 | 31.1 | 203.3 | 266.1 | 37.6 |
-| onnxruntime | cpu | fp32 | 50.9 | 53.5 | 19.5 | 349.0 | 357.6 | 22.9 |
-| onnxruntime | cpu | int8 | 63.0 | 65.6 | 15.8 | 437.6 | 449.7 | 18.2 |
-| onnxruntime | cuda | fp32 | 28.8 | 32.4 | 34.2 | 174.3 | 209.0 | 43.6 |
-| openvino | cpu | fp32 | 59.2 | 70.9 | 16.6 | 377.4 | 461.9 | 20.7 |
-| openvino | cpu | int8 | 46.9 | 56.0 | 20.9 | 313.4 | 345.1 | 25.3 |
-| tensorrt | cuda | fp16 | 22.4 | 24.9 | 44.2 | 116.9 | 121.9 | 67.3 |
+| pytorch | cpu | fp32 | 115.3 | 125.5 | 8.6 | 766.9 | 817.0 | 10.4 |
+| pytorch | cuda | fp32 | 30.9 | 33.5 | 32.0 | 196.5 | 257.5 | 39.0 |
+| onnxruntime | cpu | fp32 | 50.3 | 52.0 | 19.9 | 346.5 | 356.4 | 23.1 |
+| onnxruntime | cpu | int8 | 62.2 | 63.8 | 16.2 | 433.2 | 441.8 | 18.4 |
+| onnxruntime | cuda | fp32 | 28.5 | 31.4 | 34.9 | 167.3 | 199.9 | 46.0 |
+| openvino | cpu | fp32 | 60.5 | 69.8 | 16.6 | 401.6 | 445.8 | 19.7 |
+| openvino | cpu | int8 | 45.0 | 54.6 | 21.8 | 314.5 | 362.1 | 25.2 |
+| tensorrt | cuda | fp16 | 22.4 | 24.8 | 44.4 | 119.5 | 125.7 | 65.9 |

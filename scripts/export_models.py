@@ -41,8 +41,9 @@ OPSET = 17
 # INT8 quantisation. Its last Concat joins box coordinates (0..640 px) with
 # sigmoid class scores (0..1) in a single tensor; one per-tensor UInt8 scale
 # covering 0..640 has a step of ~2.5, which rounds every class score to 0 or
-# 2.5 and destroys accuracy. The 64 convolutions, including the head's own
-# cv2/cv3 branches, are still quantised.
+# 2.5 and destroys accuracy. 63 of the 64 convolutions, including the head's
+# cv2/cv3 branches, are still quantised; only the DFL's fixed-weight 1x1 conv
+# lies in the tail.
 _HEAD_PREFIX = "/model.22/"
 _HEAD_CONV_BRANCHES = ("/model.22/cv2", "/model.22/cv3")
 
