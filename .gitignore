@@ -41,5 +41,5 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 datasets/
-models/
+/models/
 benchmark/results/*-quick.*
