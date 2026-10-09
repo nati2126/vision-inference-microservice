@@ -15,6 +15,12 @@ decoding, NMS and box rescaling are written out in NumPy
 ([`app/models/processing.py`](app/models/processing.py)), and verified to match
 ultralytics' own pipeline exactly on the same ONNX file.
 
+![Detections returned by POST /api/v1/detect on the TensorRT FP16 backend](docs/demo.jpg)
+
+*Boxes drawn from the JSON returned by `POST /api/v1/detect`, with the service
+running the TensorRT FP16 engine. Regenerate against any running backend with
+`python -m scripts.render_demo path/to/a.jpg path/to/b.jpg --url http://localhost:8000`.*
+
 ---
 
 ## Architecture
