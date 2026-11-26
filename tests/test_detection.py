@@ -6,7 +6,9 @@ import numpy as np
 import pytest
 from httpx import AsyncClient
 
-from app.services.detection_service import _MAX_IMAGE_SIZE_BYTES
+from app.core.config import Settings
+
+MAX_UPLOAD_BYTES: int = Settings.model_fields["max_upload_bytes"].default
 
 
 def _create_test_image_bytes(width: int = 640, height: int = 480) -> bytes:
@@ -101,7 +103,7 @@ async def test_error_response_matches_documented_schema(client: AsyncClient) -> 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_detect_rejects_oversized_image(client: AsyncClient) -> None:
-    oversized = bytes(_MAX_IMAGE_SIZE_BYTES + 1)
+    oversized = bytes(MAX_UPLOAD_BYTES + 1)
 
     response = await client.post(
         "/api/v1/detect",

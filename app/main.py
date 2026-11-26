@@ -40,7 +40,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     model.load()
 
-    detection_service = DetectionService(model=model)
+    detection_service = DetectionService(
+        model=model,
+        max_upload_bytes=settings.max_upload_bytes,
+        max_image_pixels=settings.max_image_pixels,
+    )
 
     app.state.settings = settings
     app.state.model = model
