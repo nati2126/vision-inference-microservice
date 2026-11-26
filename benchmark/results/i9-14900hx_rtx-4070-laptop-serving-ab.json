@@ -1,0 +1,520 @@
+{
+  "date": "2026-11-26",
+  "before_commit": "ff4df49",
+  "after_commit": "4d21f97",
+  "method": "Interleaved per config (before, then after), 200 POST /api/v1/detect requests per concurrency level, 5 warm-up, same 640x480 coco128 JPEG, uvicorn 1 worker, httpx async client on the same machine.",
+  "rows": [
+    {
+      "label": "before",
+      "config": "pytorch-cpu-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "pytorch",
+        "precision": "fp32",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 105.41,
+          "p95_ms": 115.21,
+          "mean_ms": 106.14,
+          "requests_per_s": 9.4
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 752.44,
+          "p95_ms": 809.06,
+          "mean_ms": 744.73,
+          "requests_per_s": 10.5
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "config": "pytorch-cpu-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "pytorch",
+        "precision": "fp32",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 81.25,
+          "p95_ms": 109.23,
+          "mean_ms": 87.23,
+          "requests_per_s": 11.5
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 739.57,
+          "p95_ms": 820.28,
+          "mean_ms": 689.79,
+          "requests_per_s": 11.4
+        }
+      ]
+    },
+    {
+      "label": "before",
+      "config": "pytorch-cuda-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "pytorch",
+        "precision": "fp32",
+        "device": "cuda"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 32.54,
+          "p95_ms": 36.93,
+          "mean_ms": 33.39,
+          "requests_per_s": 30.0
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 191.53,
+          "p95_ms": 272.46,
+          "mean_ms": 193.99,
+          "requests_per_s": 40.3
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "config": "pytorch-cuda-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "pytorch",
+        "precision": "fp32",
+        "device": "cuda"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 29.48,
+          "p95_ms": 43.18,
+          "mean_ms": 29.48,
+          "requests_per_s": 33.9
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 164.17,
+          "p95_ms": 289.98,
+          "mean_ms": 180.48,
+          "requests_per_s": 43.7
+        }
+      ]
+    },
+    {
+      "label": "before",
+      "config": "onnxruntime-cpu-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "onnxruntime",
+        "precision": "fp32",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 51.08,
+          "p95_ms": 53.23,
+          "mean_ms": 50.91,
+          "requests_per_s": 19.6
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 352.45,
+          "p95_ms": 360.05,
+          "mean_ms": 346.83,
+          "requests_per_s": 22.7
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "config": "onnxruntime-cpu-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "onnxruntime",
+        "precision": "fp32",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 52.39,
+          "p95_ms": 54.42,
+          "mean_ms": 52.32,
+          "requests_per_s": 19.1
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 276.48,
+          "p95_ms": 284.66,
+          "mean_ms": 272.41,
+          "requests_per_s": 28.7
+        }
+      ]
+    },
+    {
+      "label": "before",
+      "config": "onnxruntime-cpu-int8",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "onnxruntime",
+        "precision": "int8",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 62.68,
+          "p95_ms": 64.1,
+          "mean_ms": 62.53,
+          "requests_per_s": 16.0
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 437.26,
+          "p95_ms": 441.92,
+          "mean_ms": 430.01,
+          "requests_per_s": 18.3
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "config": "onnxruntime-cpu-int8",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "onnxruntime",
+        "precision": "int8",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 63.3,
+          "p95_ms": 64.64,
+          "mean_ms": 63.1,
+          "requests_per_s": 15.8
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 363.21,
+          "p95_ms": 365.72,
+          "mean_ms": 357.54,
+          "requests_per_s": 22.0
+        }
+      ]
+    },
+    {
+      "label": "before",
+      "config": "onnxruntime-cuda-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "onnxruntime",
+        "precision": "fp32",
+        "device": "cuda"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 27.55,
+          "p95_ms": 31.22,
+          "mean_ms": 26.4,
+          "requests_per_s": 37.9
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 152.74,
+          "p95_ms": 178.18,
+          "mean_ms": 151.67,
+          "requests_per_s": 51.9
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "config": "onnxruntime-cuda-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "onnxruntime",
+        "precision": "fp32",
+        "device": "cuda"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 23.75,
+          "p95_ms": 32.91,
+          "mean_ms": 26.14,
+          "requests_per_s": 38.2
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 73.3,
+          "p95_ms": 100.37,
+          "mean_ms": 76.91,
+          "requests_per_s": 101.5
+        }
+      ]
+    },
+    {
+      "label": "before",
+      "config": "openvino-cpu-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "openvino",
+        "precision": "fp32",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 58.86,
+          "p95_ms": 64.8,
+          "mean_ms": 59.11,
+          "requests_per_s": 16.9
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 366.99,
+          "p95_ms": 407.5,
+          "mean_ms": 369.09,
+          "requests_per_s": 21.3
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "config": "openvino-cpu-fp32",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "openvino",
+        "precision": "fp32",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 62.16,
+          "p95_ms": 70.56,
+          "mean_ms": 62.92,
+          "requests_per_s": 15.9
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 288.67,
+          "p95_ms": 383.34,
+          "mean_ms": 294.57,
+          "requests_per_s": 26.7
+        }
+      ]
+    },
+    {
+      "label": "before",
+      "config": "openvino-cpu-int8",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "openvino",
+        "precision": "int8",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 38.9,
+          "p95_ms": 45.91,
+          "mean_ms": 37.6,
+          "requests_per_s": 26.6
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 246.29,
+          "p95_ms": 291.41,
+          "mean_ms": 245.78,
+          "requests_per_s": 32.0
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "config": "openvino-cpu-int8",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "openvino",
+        "precision": "int8",
+        "device": "cpu"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 41.66,
+          "p95_ms": 50.03,
+          "mean_ms": 42.17,
+          "requests_per_s": 23.7
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 231.1,
+          "p95_ms": 257.69,
+          "mean_ms": 228.58,
+          "requests_per_s": 34.3
+        }
+      ]
+    },
+    {
+      "label": "before",
+      "config": "tensorrt-cuda-fp16",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "tensorrt",
+        "precision": "fp16",
+        "device": "cuda"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 18.9,
+          "p95_ms": 22.05,
+          "mean_ms": 19.48,
+          "requests_per_s": 51.3
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 108.88,
+          "p95_ms": 117.83,
+          "mean_ms": 108.16,
+          "requests_per_s": 72.5
+        }
+      ]
+    },
+    {
+      "label": "after",
+      "config": "tensorrt-cuda-fp16",
+      "health": {
+        "status": "healthy",
+        "version": "0.1.0",
+        "model_loaded": true,
+        "backend": "tensorrt",
+        "precision": "fp16",
+        "device": "cuda"
+      },
+      "runs": [
+        {
+          "concurrency": 1,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 19.64,
+          "p95_ms": 24.55,
+          "mean_ms": 20.7,
+          "requests_per_s": 48.3
+        },
+        {
+          "concurrency": 8,
+          "requests": 200,
+          "errors": 0,
+          "p50_ms": 53.38,
+          "p95_ms": 65.38,
+          "mean_ms": 54.25,
+          "requests_per_s": 145.4
+        }
+      ]
+    }
+  ]
+}

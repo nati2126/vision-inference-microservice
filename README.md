@@ -129,17 +129,21 @@ COCO val2017 results. Latency is `predict()` end to end (preprocess + inference
 
 200 `POST /api/v1/detect` requests (the same 640x480 JPEG) per concurrency
 level, uvicorn with one worker, httpx async client on the same machine.
+Re-measured on a later day than the model table, after the inference lock was
+narrowed to the model call alone; compare rows within one table, not across
+the two. Before/after for that change:
+[`benchmark/results/i9-14900hx_rtx-4070-laptop-serving-ab.md`](benchmark/results/i9-14900hx_rtx-4070-laptop-serving-ab.md).
 
 | Backend | Device | Precision | c=1 p50 ms | c=1 p95 ms | c=1 req/s | c=8 p50 ms | c=8 p95 ms | c=8 req/s |
 |---|---|---|---:|---:|---:|---:|---:|---:|
-| pytorch | cpu | fp32 | 115.3 | 125.5 | 8.6 | 766.9 | 817.0 | 10.4 |
-| pytorch | cuda | fp32 | 30.9 | 33.5 | 32.0 | 196.5 | 257.5 | 39.0 |
-| onnxruntime | cpu | fp32 | 50.3 | 52.0 | 19.9 | 346.5 | 356.4 | 23.1 |
-| onnxruntime | cpu | int8 | 62.2 | 63.8 | 16.2 | 433.2 | 441.8 | 18.4 |
-| onnxruntime | cuda | fp32 | 28.5 | 31.4 | 34.9 | 167.3 | 199.9 | 46.0 |
-| openvino | cpu | fp32 | 60.5 | 69.8 | 16.6 | 401.6 | 445.8 | 19.7 |
-| openvino | cpu | int8 | 45.0 | 54.6 | 21.8 | 314.5 | 362.1 | 25.2 |
-| tensorrt | cuda | fp16 | 22.4 | 24.8 | 44.4 | 119.5 | 125.7 | 65.9 |
+| pytorch | cpu | fp32 | 81.2 | 109.2 | 11.5 | 739.6 | 820.3 | 11.4 |
+| pytorch | cuda | fp32 | 29.5 | 43.2 | 33.9 | 164.2 | 290.0 | 43.7 |
+| onnxruntime | cpu | fp32 | 52.4 | 54.4 | 19.1 | 276.5 | 284.7 | 28.7 |
+| onnxruntime | cpu | int8 | 63.3 | 64.6 | 15.8 | 363.2 | 365.7 | 22.0 |
+| onnxruntime | cuda | fp32 | 23.8 | 32.9 | 38.2 | 73.3 | 100.4 | 101.5 |
+| openvino | cpu | fp32 | 62.2 | 70.6 | 15.9 | 288.7 | 383.3 | 26.7 |
+| openvino | cpu | int8 | 41.7 | 50.0 | 23.7 | 231.1 | 257.7 | 34.3 |
+| tensorrt | cuda | fp16 | 19.6 | 24.6 | 48.3 | 53.4 | 65.4 | 145.4 |
 
 ### Reproduce
 
@@ -199,14 +203,18 @@ of the decode code. On the same ONNX file it matches ultralytics bit for bit.
 - **PyTorch scores slightly higher (0.448 vs 0.444)** because ultralytics
   letterboxes `.pt` models to a minimal rectangle (640x480 for a 4:3 image)
   instead of the exported models' fixed 640x640, so its inputs differ a little.
-- **Concurrency does not buy much throughput.** Inference is serialised behind a
-  lock (one model instance per process), so at concurrency 8 the p50 latency
-  grows 5.3–7.0x while throughput rises only 14–48%: just the upload, decode
-  and JSON work of other requests overlaps with inference (the most for
-  TensorRT, whose inference is the shortest). More throughput needs more
-  workers or dynamic batching.
+- **Only the model call is serialised.** There is one model instance per
+  process, and a lock lets one request at a time into it. Decoding,
+  letterboxing and NMS for other requests run alongside it in the thread pool.
+  Going from concurrency 1 to 8 lifts throughput 2.7–3.0x on the GPU backends
+  and 1.4–1.7x on the CPU ones, where those stages compete with inference for
+  cores. PyTorch gains little (1.0–1.3x), because ultralytics letterboxes and
+  runs NMS inside the locked call. When the lock covered all three stages,
+  TensorRT served 72.5 req/s at concurrency 8; it now serves 145.4 (A/B run
+  back to back on the same day). Going further needs dynamic batching or more
+  workers.
 - **HTTP adds about 10 ms** per request over `predict()` at concurrency 1
-  (ONNX Runtime CPU: 50.3 vs 40.6 ms p50).
+  (ONNX Runtime CPU in the original run: 50.3 vs 40.6 ms p50).
 
 **Two runtime traps, both handled in code.** ONNX Runtime silently falls back
 to the CPU when the CUDA provider fails to initialise; the backend checks the
@@ -256,6 +264,13 @@ every other CUDA library loaded afterwards; the PyTorch backend passes a
 }
 ```
 
+### `GET /livez` and `GET /readyz`
+
+Probes for orchestrators, outside the versioned API. `/livez` returns 200
+`{"status": "ok"}` while the process serves requests. `/readyz` returns 200
+`{"status": "ready"}` once the model is loaded and 503 `{"status": "not_ready"}`
+otherwise; the Docker and Compose health checks use it.
+
 ### `POST /api/v1/detect`
 
 ```bash
@@ -280,7 +295,9 @@ curl -X POST http://localhost:8000/api/v1/detect -F "file=@image.jpg"
 }
 ```
 
-The response is identical for every backend.
+The response is identical for every backend. `inference_time_ms` covers
+preprocessing, the model call and postprocessing, but not time spent waiting
+for the model while other requests use it.
 
 ### Errors
 
@@ -295,7 +312,7 @@ Failures return the `ErrorResponse` envelope:
 
 | Status | Cause |
 |--------|-------|
-| `400` | Unsupported content type, undecodable image, empty body, or over the 10 MB cap |
+| `400` | Unsupported content type, undecodable image, empty body, or over `MAX_UPLOAD_BYTES` / `MAX_IMAGE_PIXELS` |
 | `422` | Malformed request (e.g. no file field) |
 | `500` | Inference failure: details are logged, never returned |
 
@@ -317,6 +334,8 @@ All settings come from environment variables (see [`.env.example`](.env.example)
 | `MODEL_IOU_THRESHOLD` | `0.7` | NMS overlap threshold |
 | `MODEL_MAX_DETECTIONS` | `300` | Maximum detections per image |
 | `MODEL_WEIGHTS_DIR` | `~/.cache/vision-inference/weights` | Where a bare `.pt` filename is downloaded and cached |
+| `MAX_UPLOAD_BYTES` | `10485760` | Largest accepted upload (10 MiB) |
+| `MAX_IMAGE_PIXELS` | `50000000` | Largest accepted width x height, read from the image header before decoding |
 | `CORS_ALLOW_ORIGINS` | `["*"]` | Allowed origins, as a JSON list |
 | `CORS_ALLOW_CREDENTIALS` | `false` | Ignored while origins is `["*"]`, since browsers reject that pairing |
 | `LOG_LEVEL` | `INFO` | Logging severity |
