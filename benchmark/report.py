@@ -53,7 +53,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f" serving thresholds (conf {settings['serving_thresholds']['conf']}).",
         f"- **Batching:** the model call alone (`infer_batch`, no pre/post-processing),"
         f" {budget['warmup_runs']} warm-up + {budget['batch_timed_runs']} timed calls per batch size."
-        " PyTorch's call runs ultralytics' whole pipeline and only takes batch 1.",
+        " PyTorch's call runs ultralytics' whole pipeline and only takes batch 1. Timed after"
+        " the memory peaks were read, so the memory columns are for batch 1.",
         f"- **HTTP:** {budget['http_requests']} `POST /api/v1/detect` requests per concurrency level"
         " against uvicorn (1 worker); client and server share the machine. Batch max is the"
         " server's `BATCH_MAX_SIZE`, capped by what the artifact accepts.",

@@ -154,32 +154,6 @@ def run_worker(config: Config, budget: Budget) -> dict[str, Any]:
             "throughput_img_s": round(1000.0 / float(ms.mean()), 1),
         }
 
-        # The model call alone, batched; pre- and post-processing are not timed.
-        result["max_batch_size"] = backend.max_batch_size
-        prepared = backend.preprocess(image)
-        model_call = []
-        for size in budget.batch_sizes:
-            if backend.max_batch_size is not None and size > backend.max_batch_size:
-                continue
-            batch = [prepared] * size
-            for _ in range(budget.warmup_runs):
-                backend.infer_batch(batch)
-            call_ms = []
-            for _ in range(budget.batch_timed_runs):
-                t0 = time.perf_counter()
-                backend.infer_batch(batch)
-                call_ms.append((time.perf_counter() - t0) * 1000)
-            mean_ms = float(np.mean(call_ms))
-            model_call.append(
-                {
-                    "batch_size": size,
-                    "timed_runs": budget.batch_timed_runs,
-                    "mean_ms": round(mean_ms, 2),
-                    "img_s": round(size * 1000.0 / mean_ms, 1),
-                }
-            )
-        result["model_call"] = model_call
-
     backend.confidence_threshold = EVAL_CONF
     backend.iou_threshold = EVAL_IOU
     backend.max_detections = EVAL_MAX_DET
@@ -206,6 +180,34 @@ def run_worker(config: Config, budget: Budget) -> dict[str, Any]:
     result["peak_rss_mb"] = round(_peak_rss_mb(), 1)
     if sampler is not None:
         result["peak_gpu_mem_mb"] = round(sampler.stop(), 1)
+
+    # After the memory peaks, so those stay a batch-1 measurement.
+    if not config.accuracy_only:
+        # The model call alone, batched; pre- and post-processing are not timed.
+        result["max_batch_size"] = backend.max_batch_size
+        prepared = backend.preprocess(image)
+        model_call = []
+        for size in budget.batch_sizes:
+            if backend.max_batch_size is not None and size > backend.max_batch_size:
+                continue
+            batch = [prepared] * size
+            for _ in range(budget.warmup_runs):
+                backend.infer_batch(batch)
+            call_ms = []
+            for _ in range(budget.batch_timed_runs):
+                t0 = time.perf_counter()
+                backend.infer_batch(batch)
+                call_ms.append((time.perf_counter() - t0) * 1000)
+            mean_ms = float(np.mean(call_ms))
+            model_call.append(
+                {
+                    "batch_size": size,
+                    "timed_runs": budget.batch_timed_runs,
+                    "mean_ms": round(mean_ms, 2),
+                    "img_s": round(size * 1000.0 / mean_ms, 1),
+                }
+            )
+        result["model_call"] = model_call
     backend.unload()
     return result
 
