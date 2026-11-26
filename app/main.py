@@ -45,7 +45,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         model=model,
         max_upload_bytes=settings.max_upload_bytes,
         max_image_pixels=settings.max_image_pixels,
+        max_batch_size=settings.batch_max_size,
+        batch_timeout_ms=settings.batch_timeout_ms,
     )
+    detection_service.warm_up()
 
     app.state.settings = settings
     app.state.model = model
@@ -55,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     logger.info("application_shutting_down")
+    await detection_service.close()
     model.unload()
     logger.info("application_stopped")
 

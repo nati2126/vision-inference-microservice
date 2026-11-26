@@ -27,6 +27,7 @@ async def health_check(request: Request) -> HealthResponse:
         backend=model.name,
         precision=model.precision,
         device=model.device,
+        max_batch_size=request.app.state.detection_service.max_batch_size,
     )
 
 
