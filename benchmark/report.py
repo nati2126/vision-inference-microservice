@@ -11,8 +11,12 @@ def _fmt(value: Any, digits: int = 1) -> str:
     return str(value)
 
 
-def _http(row: dict[str, Any], concurrency: int) -> dict[str, Any]:
-    return next((r for r in row.get("http", []) if r["concurrency"] == concurrency), {})
+def _run(runs: list[dict[str, Any]], concurrency: int) -> dict[str, Any]:
+    return next((r for r in runs if r["concurrency"] == concurrency), {})
+
+
+def _call(row: dict[str, Any], batch_size: int) -> dict[str, Any]:
+    return next((c for c in row.get("model_call", []) if c["batch_size"] == batch_size), {})
 
 
 def hardware_line(report: dict[str, Any]) -> str:
@@ -47,8 +51,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- **Latency:** `predict()` end to end (preprocess + inference + postprocess), batch 1,"
         f" {budget['warmup_runs']} warm-up + {budget['timed_runs']} timed runs on one 640x480 image,"
         f" serving thresholds (conf {settings['serving_thresholds']['conf']}).",
+        f"- **Batching:** the model call alone (`infer_batch`, no pre/post-processing),"
+        f" {budget['warmup_runs']} warm-up + {budget['batch_timed_runs']} timed calls per batch size."
+        " PyTorch's call runs ultralytics' whole pipeline and only takes batch 1.",
         f"- **HTTP:** {budget['http_requests']} `POST /api/v1/detect` requests per concurrency level"
-        " against uvicorn (1 worker); client and server share the machine.",
+        " against uvicorn (1 worker); client and server share the machine. Batch max is the"
+        " server's `BATCH_MAX_SIZE`, capped by what the artifact accepts.",
         "",
         "## Model",
         "",
@@ -68,23 +76,42 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"| {_fmt(r.get('peak_gpu_mem_mb'), 0)} |"
         )
 
+    batch_sizes = budget["batch_sizes"]
+    if any(r.get("model_call") for r in serving):
+        header = "| Backend | Device | Precision | Max batch |"
+        rule = "|---|---|---|---:|"
+        for b in batch_sizes:
+            header += f" batch {b} ms | batch {b} img/s |"
+            rule += "---:|---:|"
+        lines += ["", "## Batching (model call)", "", header, rule]
+        for r in serving:
+            limit = r.get("max_batch_size")
+            cells = f"| {r['backend']} | {r['device']} | {r['precision']} | {limit or 'any'} |"
+            for b in batch_sizes:
+                call = _call(r, b)
+                cells += f" {_fmt(call.get('mean_ms'), 2)} | {_fmt(call.get('img_s'))} |"
+            lines.append(cells)
+
     if any("http" in r for r in serving):
-        header = "| Backend | Device | Precision |"
-        rule = "|---|---|---|"
+        header = "| Backend | Device | Precision | Batch max |"
+        rule = "|---|---|---|---:|"
         for c in concurrencies:
             header += f" c={c} p50 ms | c={c} p95 ms | c={c} req/s |"
             rule += "---:|---:|---:|"
         lines += ["", "## HTTP", "", header, rule]
         for r in serving:
-            cells = f"| {r['backend']} | {r['device']} | {r['precision']} |"
-            for c in concurrencies:
-                run = _http(r, c)
-                errors = f" ({run['errors']} errors)" if run.get("errors") else ""
-                cells += (
-                    f" {_fmt(run.get('p50_ms'))} | {_fmt(run.get('p95_ms'))}"
-                    f" | {_fmt(run.get('requests_per_s'))}{errors} |"
+            for http in r.get("http", []):
+                cells = (
+                    f"| {r['backend']} | {r['device']} | {r['precision']} | {http['batch_max']} |"
                 )
-            lines.append(cells)
+                for c in concurrencies:
+                    run = _run(http["runs"], c)
+                    errors = f" ({run['errors']} errors)" if run.get("errors") else ""
+                    cells += (
+                        f" {_fmt(run.get('p50_ms'))} | {_fmt(run.get('p95_ms'))}"
+                        f" | {_fmt(run.get('requests_per_s'))}{errors} |"
+                    )
+                lines.append(cells)
 
     not_run = [r for r in rows if r.get("status") != "ok"]
     if not_run:
