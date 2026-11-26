@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     # Checked from the image header, so oversized images are never decoded.
     max_image_pixels: int = Field(default=50_000_000, gt=0)
 
+    # Capped by what the model artifact accepts; 1 turns batching off.
+    batch_max_size: int = Field(default=8, ge=1)
+    # How long a batch waits to fill; 0 only takes requests that are already queued.
+    batch_timeout_ms: float = Field(default=0.0, ge=0.0)
+
     # JSON list, e.g. CORS_ALLOW_ORIGINS='["https://app.example.com"]'.
     cors_allow_origins: list[str] = ["*"]
     cors_allow_credentials: bool = False

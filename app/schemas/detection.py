@@ -51,6 +51,9 @@ class HealthResponse(BaseModel):
         ..., description="Numeric precision of the loaded model: fp32, fp16 or int8"
     )
     device: str = Field(..., description="Compute device the backend runs on")
+    max_batch_size: int = Field(
+        ..., ge=1, description="Most requests one model call serves; 1 means no batching"
+    )
 
 
 class ErrorResponse(BaseModel):
