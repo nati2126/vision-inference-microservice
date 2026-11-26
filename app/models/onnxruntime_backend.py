@@ -8,10 +8,9 @@ import numpy.typing as npt
 import onnxruntime as ort
 
 from app.core.logging import get_logger
-from app.models.base import Detection, InferenceBackend
+from app.models.exported import ExportedBackend
 from app.models.labels import parse_names
 from app.models.onnx_utils import onnx_precision
-from app.models.processing import postprocess, preprocess
 
 logger = get_logger(__name__)
 
@@ -32,7 +31,7 @@ def _preload_cuda_libraries() -> None:
                 preload()
 
 
-class OnnxRuntimeBackend(InferenceBackend):
+class OnnxRuntimeBackend(ExportedBackend):
     name = "onnxruntime"
 
     def __init__(
@@ -48,9 +47,6 @@ class OnnxRuntimeBackend(InferenceBackend):
         super().__init__(model_path, device, confidence_threshold, iou_threshold, max_detections)
         self._session: ort.InferenceSession | None = None
         self._input_name = ""
-        self._input_size = 640
-        self._labels: list[str] = []
-        self._precision = "unknown"
 
     def load(self) -> None:
         logger.info("loading_model", backend=self.name, path=self.model_path, device=self.device)
@@ -79,33 +75,18 @@ class OnnxRuntimeBackend(InferenceBackend):
         self._precision = onnx_precision(self.model_path)
         self._session = session
 
-        self.predict(np.zeros((self._input_size, self._input_size, 3), dtype=np.uint8))
+        self._warm_up()
         logger.info("model_loaded", backend=self.name, precision=self._precision)
 
     def unload(self) -> None:
         self._session = None
         logger.info("model_unloaded", backend=self.name)
 
-    def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
-        if self._session is None:
-            raise RuntimeError("Model is not loaded. Call .load() first.")
-
-        tensor, info = preprocess(image, self._input_size)
+    def _forward(self, tensor: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+        assert self._session is not None
         (output,) = self._session.run(None, {self._input_name: tensor})
-        return postprocess(
-            np.asarray(output),
-            info,
-            original_shape=(image.shape[0], image.shape[1]),
-            labels=self._labels,
-            confidence_threshold=self.confidence_threshold,
-            iou_threshold=self.iou_threshold,
-            max_detections=self.max_detections,
-        )
+        return np.asarray(output, dtype=np.float32)
 
     @property
     def is_loaded(self) -> bool:
         return self._session is not None
-
-    @property
-    def precision(self) -> str:
-        return self._precision

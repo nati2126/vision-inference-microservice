@@ -57,12 +57,13 @@ class PyTorchBackend(InferenceBackend):
         self._model = None
         logger.info("model_unloaded", backend=self.name)
 
-    def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
+    def infer(self, inputs: npt.NDArray[np.uint8]) -> list[Detection]:
+        # ultralytics runs pre- and post-processing inside its own predictor.
         if self._model is None:
             raise RuntimeError("Model is not loaded. Call .load() first.")
 
         results = self._model.predict(
-            source=image,
+            source=inputs,
             conf=self.confidence_threshold,
             iou=self.iou_threshold,
             max_det=self.max_detections,
