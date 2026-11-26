@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     # Where bare .pt filenames are downloaded; the container's WORKDIR is read-only.
     model_weights_dir: Path = Path.home() / ".cache" / "vision-inference" / "weights"
 
+    max_upload_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
+    # Checked from the image header, so oversized images are never decoded.
+    max_image_pixels: int = Field(default=50_000_000, gt=0)
+
     # JSON list, e.g. CORS_ALLOW_ORIGINS='["https://app.example.com"]'.
     cors_allow_origins: list[str] = ["*"]
     cors_allow_credentials: bool = False

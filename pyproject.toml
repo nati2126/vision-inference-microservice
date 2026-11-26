@@ -19,6 +19,7 @@ dependencies = [
     "structlog>=24.4",
     "numpy>=1.26",
     "opencv-python-headless>=4.10",
+    "pillow>=10.0",
     "ultralytics>=8.3.57,<8.4",
     "torch>=2.0,<2.9",
     # Conflicts with onnxruntime-gpu; uninstall it before installing [gpu].

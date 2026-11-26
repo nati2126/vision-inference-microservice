@@ -45,3 +45,21 @@ def test_invalid_values_are_rejected_at_startup(
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_upload_limits_come_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MAX_UPLOAD_BYTES", "2048")
+    monkeypatch.setenv("MAX_IMAGE_PIXELS", "1000000")
+
+    settings = Settings(_env_file=None)  # type: ignore[call-arg]
+
+    assert settings.max_upload_bytes == 2048
+    assert settings.max_image_pixels == 1_000_000
+
+
+@pytest.mark.parametrize("var", ["MAX_UPLOAD_BYTES", "MAX_IMAGE_PIXELS"])
+def test_upload_limits_must_be_positive(monkeypatch: pytest.MonkeyPatch, var: str) -> None:
+    monkeypatch.setenv(var, "0")
+
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)  # type: ignore[call-arg]
