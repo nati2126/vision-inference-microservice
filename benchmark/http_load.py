@@ -25,7 +25,9 @@ def _free_port() -> int:
 class ServiceProcess:
     """Run ``uvicorn app.main:app`` for one backend in a child process."""
 
-    def __init__(self, backend: str, model_path: str, device: str) -> None:
+    def __init__(
+        self, backend: str, model_path: str, device: str, env: dict[str, str] | None = None
+    ) -> None:
         self.port = _free_port()
         self.base_url = f"http://127.0.0.1:{self.port}"
         self._env = {
@@ -35,6 +37,7 @@ class ServiceProcess:
             "MODEL_DEVICE": device,
             "LOG_LEVEL": "WARNING",
             "LOG_FORMAT": "json",
+            **(env or {}),
         }
         self._log = tempfile.NamedTemporaryFile(  # noqa: SIM115  # closed in stop()
             prefix="bench-server-", suffix=".log", delete=False
@@ -143,9 +146,10 @@ def run_http_benchmark(
     total: int,
     concurrencies: tuple[int, ...],
     warmup: int,
+    env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Start the service for one backend and load-test ``/detect``."""
-    service = ServiceProcess(backend, model_path, device)
+    service = ServiceProcess(backend, model_path, device, env)
     try:
         health = service.start()
         url = f"{service.base_url}/api/v1/detect"

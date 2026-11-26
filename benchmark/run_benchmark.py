@@ -56,10 +56,13 @@ class Budget:
     http_requests: int
     http_warmup: int
     http_concurrency: tuple[int, ...]
+    batch_sizes: tuple[int, ...]  # model-call throughput is timed at each
+    batch_timed_runs: int
+    http_batch_max: tuple[int, ...]  # BATCH_MAX_SIZE values the server is load-tested with
 
 
-FULL = Budget(None, 10, 100, 200, 5, (1, 8))
-QUICK = Budget(16, 3, 20, 20, 2, (1, 8))
+FULL = Budget(None, 10, 100, 200, 5, (1, 8, 32), (1, 8), 30, (1, 8))
+QUICK = Budget(16, 3, 20, 20, 2, (1, 8), (1, 8), 5, (1, 8))
 
 
 def _peak_rss_mb() -> float:
@@ -151,6 +154,32 @@ def run_worker(config: Config, budget: Budget) -> dict[str, Any]:
             "throughput_img_s": round(1000.0 / float(ms.mean()), 1),
         }
 
+        # The model call alone, batched; pre- and post-processing are not timed.
+        result["max_batch_size"] = backend.max_batch_size
+        prepared = backend.preprocess(image)
+        model_call = []
+        for size in budget.batch_sizes:
+            if backend.max_batch_size is not None and size > backend.max_batch_size:
+                continue
+            batch = [prepared] * size
+            for _ in range(budget.warmup_runs):
+                backend.infer_batch(batch)
+            call_ms = []
+            for _ in range(budget.batch_timed_runs):
+                t0 = time.perf_counter()
+                backend.infer_batch(batch)
+                call_ms.append((time.perf_counter() - t0) * 1000)
+            mean_ms = float(np.mean(call_ms))
+            model_call.append(
+                {
+                    "batch_size": size,
+                    "timed_runs": budget.batch_timed_runs,
+                    "mean_ms": round(mean_ms, 2),
+                    "img_s": round(size * 1000.0 / mean_ms, 1),
+                }
+            )
+        result["model_call"] = model_call
+
     backend.confidence_threshold = EVAL_CONF
     backend.iou_threshold = EVAL_IOU
     backend.max_detections = EVAL_MAX_DET
@@ -238,19 +267,25 @@ def run_all(quick: bool, only: list[str] | None, skip_http: bool) -> dict[str, A
             row["size_mb"] = _artifact_size_mb(Path(config.model_path))
             if not (config.accuracy_only or skip_http):
                 print(" http ...", end="", flush=True)
-                http = run_http_benchmark(
-                    config.backend,
-                    config.model_path,
-                    config.device,
-                    http_image,
-                    budget.http_requests,
-                    budget.http_concurrency,
-                    budget.http_warmup,
-                )
-                served = (http["health"]["backend"], http["health"]["precision"])
-                if served != (config.backend, row["precision"]):
-                    raise RuntimeError(f"server reported {served}, expected {config.backend}")
-                row["http"] = http["runs"]
+                limit = row.get("max_batch_size")
+                settings = sorted({min(b, limit) if limit else b for b in budget.http_batch_max})
+                row["http"] = []
+                for batch_max in settings:
+                    http = run_http_benchmark(
+                        config.backend,
+                        config.model_path,
+                        config.device,
+                        http_image,
+                        budget.http_requests,
+                        budget.http_concurrency,
+                        budget.http_warmup,
+                        env={"BATCH_MAX_SIZE": str(batch_max)},
+                    )
+                    health = http["health"]
+                    served = (health["backend"], health["precision"], health["max_batch_size"])
+                    if served != (config.backend, row["precision"], batch_max):
+                        raise RuntimeError(f"server reported {served}, expected {config.backend}")
+                    row["http"].append({"batch_max": batch_max, "runs": http["runs"]})
             row["status"] = "ok"
         except Exception as exc:
             row.update(status="failed", reason=str(exc))
