@@ -140,10 +140,23 @@ def test_backend_matches_onnx_fp32_reference(
 
 
 def test_numpy_pipeline_matches_ultralytics_on_the_same_onnx_file(
-    reference: InferenceBackend, onnx_fp32_path: Path, bus_image: npt.NDArray[np.uint8]
+    reference: InferenceBackend,
+    onnx_fp32_path: Path,
+    bus_image: npt.NDArray[np.uint8],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import torch
+    import ultralytics.engine.predictor as predictor_module
     from ultralytics import YOLO
+
+    # A dynamic batch makes ultralytics letterbox to a minimal rectangle, which the
+    # file's fixed 640x640 input rejects; use the square letterbox it uses otherwise.
+    letterbox = predictor_module.LetterBox
+    monkeypatch.setattr(
+        predictor_module,
+        "LetterBox",
+        lambda *args, **kwargs: letterbox(*args, **{**kwargs, "auto": False}),
+    )
 
     result = YOLO(str(onnx_fp32_path), task="detect").predict(
         bus_image, device=torch.device("cpu"), verbose=False
@@ -189,3 +202,47 @@ def test_predict_before_load_raises(backend: str) -> None:
         pytest.skip(f"{backend} is not installed")
     with pytest.raises(RuntimeError, match="not loaded"):
         create_backend(backend, "unused.onnx").predict(np.zeros((8, 8, 3), np.uint8))
+
+
+def test_exported_artifacts_accept_batches(
+    case_and_backend: tuple[Case, InferenceBackend],
+) -> None:
+    case, backend = case_and_backend
+    limit = backend.max_batch_size
+
+    if case.backend == "pytorch" or case.id == "onnxruntime-cuda-fp32":
+        assert limit == 1
+    else:
+        assert limit is None or limit >= 8, f"{case.artifact} was exported with a fixed batch"
+
+
+def test_batched_inference_matches_single_images(
+    case_and_backend: tuple[Case, InferenceBackend],
+    bus_image: npt.NDArray[np.uint8],
+    zidane_image: npt.NDArray[np.uint8],
+) -> None:
+    case, backend = case_and_backend
+    images = [bus_image, zidane_image, bus_image][: backend.max_batch_size or 3]
+    inputs = [backend.preprocess(image) for image in images]
+
+    outputs = backend.infer_batch(inputs)
+
+    assert len(outputs) == len(images)
+    for image, single_input, output in zip(images, inputs, outputs, strict=True):
+        batched = backend.postprocess(output, single_input)
+        single = backend.predict(image)
+        _assert_confident_detections_match(single, batched, case.min_iou, case.max_conf_diff)
+        _assert_confident_detections_match(batched, single, case.min_iou, case.max_conf_diff)
+
+
+def test_batch_over_the_engine_limit_is_rejected(
+    case_and_backend: tuple[Case, InferenceBackend], bus_image: npt.NDArray[np.uint8]
+) -> None:
+    _, backend = case_and_backend
+    limit = backend.max_batch_size
+    if limit is None or limit == 1:
+        pytest.skip("no fixed batch limit above 1")
+    one = backend.preprocess(bus_image)
+
+    with pytest.raises(ValueError, match="exceeds"):
+        backend.infer_batch([one] * (limit + 1))
