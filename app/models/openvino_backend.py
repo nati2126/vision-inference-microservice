@@ -5,16 +5,15 @@ import numpy.typing as npt
 import openvino as ov
 
 from app.core.logging import get_logger
-from app.models.base import Detection, InferenceBackend
+from app.models.exported import ExportedBackend
 from app.models.labels import parse_names
-from app.models.processing import postprocess, preprocess
 
 logger = get_logger(__name__)
 
 NAMES_RT_INFO_KEY = ["model_info", "names"]
 
 
-class OpenVINOBackend(InferenceBackend):
+class OpenVINOBackend(ExportedBackend):
     name = "openvino"
 
     def __init__(
@@ -30,9 +29,6 @@ class OpenVINOBackend(InferenceBackend):
         super().__init__(model_path, device, confidence_threshold, iou_threshold, max_detections)
         self._request: ov.InferRequest | None = None
         self._compiled: ov.CompiledModel | None = None
-        self._input_size = 640
-        self._labels: list[str] = []
-        self._precision = "unknown"
 
     def load(self) -> None:
         logger.info("loading_model", backend=self.name, path=self.model_path, device=self.device)
@@ -66,7 +62,7 @@ class OpenVINOBackend(InferenceBackend):
         self._compiled = compiled
         self._request = compiled.create_infer_request()
 
-        self.predict(np.zeros((self._input_size, self._input_size, 3), dtype=np.uint8))
+        self._warm_up()
         logger.info("model_loaded", backend=self.name, precision=self._precision)
 
     def unload(self) -> None:
@@ -74,27 +70,12 @@ class OpenVINOBackend(InferenceBackend):
         self._compiled = None
         logger.info("model_unloaded", backend=self.name)
 
-    def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
-        if self._request is None:
-            raise RuntimeError("Model is not loaded. Call .load() first.")
-
-        tensor, info = preprocess(image, self._input_size)
+    def _forward(self, tensor: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+        assert self._request is not None
         self._request.infer({0: tensor})
-        output = self._request.get_output_tensor(0).data
-        return postprocess(
-            np.asarray(output),
-            info,
-            original_shape=(image.shape[0], image.shape[1]),
-            labels=self._labels,
-            confidence_threshold=self.confidence_threshold,
-            iou_threshold=self.iou_threshold,
-            max_detections=self.max_detections,
-        )
+        # The output tensor's buffer is reused by the next infer call.
+        return np.array(self._request.get_output_tensor(0).data, dtype=np.float32)
 
     @property
     def is_loaded(self) -> bool:
         return self._request is not None
-
-    @property
-    def precision(self) -> str:
-        return self._precision

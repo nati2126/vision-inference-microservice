@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import numpy.typing as npt
@@ -34,7 +34,11 @@ class Detection:
 
 
 class InferenceBackend(ABC):
-    """A detector that maps a BGR image to a list of detections."""
+    """A detector that maps a BGR image to a list of detections.
+
+    predict() runs three stages. preprocess and postprocess are thread-safe;
+    infer is not, so concurrent callers must serialise it.
+    """
 
     name: str = "base"
 
@@ -58,8 +62,18 @@ class InferenceBackend(ABC):
     @abstractmethod
     def unload(self) -> None: ...
 
+    def preprocess(self, image: npt.NDArray[np.uint8]) -> Any:
+        return image
+
     @abstractmethod
-    def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]: ...
+    def infer(self, inputs: Any) -> Any: ...
+
+    def postprocess(self, outputs: Any, inputs: Any) -> list[Detection]:
+        return cast("list[Detection]", outputs)
+
+    def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
+        inputs = self.preprocess(image)
+        return self.postprocess(self.infer(inputs), inputs)
 
     @property
     @abstractmethod

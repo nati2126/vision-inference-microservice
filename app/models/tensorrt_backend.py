@@ -10,9 +10,8 @@ import tensorrt as trt
 import torch
 
 from app.core.logging import get_logger
-from app.models.base import Detection, InferenceBackend
+from app.models.exported import ExportedBackend
 from app.models.labels import parse_names
-from app.models.processing import postprocess, preprocess
 
 logger = get_logger(__name__)
 
@@ -26,7 +25,7 @@ def engine_metadata_path(engine_path: str | Path) -> Path:
     return Path(f"{engine_path}.json")
 
 
-class TensorRTBackend(InferenceBackend):
+class TensorRTBackend(ExportedBackend):
     name = "tensorrt"
 
     def __init__(
@@ -45,9 +44,6 @@ class TensorRTBackend(InferenceBackend):
         self._stream: torch.cuda.Stream | None = None
         self._input: torch.Tensor | None = None
         self._output: torch.Tensor | None = None
-        self._input_size = 640
-        self._labels: list[str] = []
-        self._precision = "unknown"
 
     def load(self) -> None:
         logger.info("loading_model", backend=self.name, path=self.model_path, device=self.device)
@@ -88,7 +84,7 @@ class TensorRTBackend(InferenceBackend):
         self._engine, self._context = engine, context
         self._stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
 
-        self.predict(np.zeros((self._input_size, self._input_size, 3), dtype=np.uint8))
+        self._warm_up()
         logger.info("model_loaded", backend=self.name, precision=self._precision)
 
     def unload(self) -> None:
@@ -99,33 +95,17 @@ class TensorRTBackend(InferenceBackend):
         torch.cuda.empty_cache()
         logger.info("model_unloaded", backend=self.name)
 
-    def predict(self, image: npt.NDArray[np.uint8]) -> list[Detection]:
-        if self._context is None or self._stream is None:
-            raise RuntimeError("Model is not loaded. Call .load() first.")
+    def _forward(self, tensor: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+        assert self._context is not None and self._stream is not None
         assert self._input is not None and self._output is not None
-
-        tensor, info = preprocess(image, self._input_size)
         with torch.cuda.stream(self._stream):
             self._input.copy_(torch.from_numpy(tensor).to(self._input.dtype))
             if not self._context.execute_async_v3(self._stream.cuda_stream):
                 raise RuntimeError("TensorRT execution failed.")
             output = self._output.float().cpu()
         self._stream.synchronize()
-
-        return postprocess(
-            output.numpy(),
-            info,
-            original_shape=(image.shape[0], image.shape[1]),
-            labels=self._labels,
-            confidence_threshold=self.confidence_threshold,
-            iou_threshold=self.iou_threshold,
-            max_detections=self.max_detections,
-        )
+        return output.numpy()
 
     @property
     def is_loaded(self) -> bool:
         return self._context is not None
-
-    @property
-    def precision(self) -> str:
-        return self._precision
