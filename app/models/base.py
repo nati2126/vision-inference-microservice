@@ -37,7 +37,7 @@ class InferenceBackend(ABC):
     """A detector that maps a BGR image to a list of detections.
 
     predict() runs three stages. preprocess and postprocess are thread-safe;
-    infer is not, so concurrent callers must serialise it.
+    infer and infer_batch are not, so concurrent callers must serialise them.
     """
 
     name: str = "base"
@@ -67,6 +67,15 @@ class InferenceBackend(ABC):
 
     @abstractmethod
     def infer(self, inputs: Any) -> Any: ...
+
+    def infer_batch(self, batch: list[Any]) -> list[Any]:
+        """One model call for several preprocessed inputs; outputs keep their order."""
+        return [self.infer(inputs) for inputs in batch]
+
+    @property
+    def max_batch_size(self) -> int | None:
+        """Largest batch infer_batch runs as one model call; None means no limit."""
+        return 1
 
     def postprocess(self, outputs: Any, inputs: Any) -> list[Detection]:
         return cast("list[Detection]", outputs)

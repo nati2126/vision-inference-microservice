@@ -30,6 +30,7 @@ class ExportedBackend(InferenceBackend):
         self._input_size = 640
         self._labels: list[str] = []
         self._precision = "unknown"
+        self._max_batch: int | None = 1
 
     @abstractmethod
     def _forward(self, tensor: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]: ...
@@ -39,8 +40,20 @@ class ExportedBackend(InferenceBackend):
         return PreparedImage(tensor, info, (image.shape[0], image.shape[1]))
 
     def infer(self, inputs: PreparedImage) -> npt.NDArray[np.float32]:
+        return self.infer_batch([inputs])[0]
+
+    def infer_batch(self, batch: list[PreparedImage]) -> list[npt.NDArray[np.float32]]:
         self._require_loaded()
-        return self._forward(inputs.tensor)
+        if self._max_batch is not None and len(batch) > self._max_batch:
+            raise ValueError(
+                f"batch of {len(batch)} exceeds this model's maximum of {self._max_batch}"
+            )
+        outputs = self._forward(np.concatenate([inputs.tensor for inputs in batch]))
+        return [outputs[i : i + 1] for i in range(len(batch))]
+
+    @property
+    def max_batch_size(self) -> int | None:
+        return self._max_batch
 
     def postprocess(
         self, outputs: npt.NDArray[np.float32], inputs: PreparedImage

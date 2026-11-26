@@ -44,6 +44,8 @@ class TensorRTBackend(ExportedBackend):
         self._stream: torch.cuda.Stream | None = None
         self._input: torch.Tensor | None = None
         self._output: torch.Tensor | None = None
+        self._input_name = ""
+        self._dynamic_batch = False
 
     def load(self) -> None:
         logger.info("loading_model", backend=self.name, path=self.model_path, device=self.device)
@@ -62,21 +64,33 @@ class TensorRTBackend(ExportedBackend):
         if sidecar.exists():
             metadata = json.loads(sidecar.read_text(encoding="utf-8"))
 
-        buffers: dict[str, torch.Tensor] = {}
         context = engine.create_execution_context()
-        for index in range(engine.num_io_tensors):
-            tensor_name = engine.get_tensor_name(index)
-            shape = tuple(engine.get_tensor_shape(tensor_name))
-            dtype = _TORCH_DTYPES[engine.get_tensor_dtype(tensor_name)]
-            buffers[tensor_name] = torch.empty(shape, dtype=dtype, device="cuda")
-            context.set_tensor_address(tensor_name, buffers[tensor_name].data_ptr())
-            if engine.get_tensor_mode(tensor_name) == trt.TensorIOMode.INPUT:
-                self._input = buffers[tensor_name]
-            else:
-                self._output = buffers[tensor_name]
-
-        if self._input is None or self._output is None:
+        names = [engine.get_tensor_name(i) for i in range(engine.num_io_tensors)]
+        inputs = [n for n in names if engine.get_tensor_mode(n) == trt.TensorIOMode.INPUT]
+        outputs = [n for n in names if n not in inputs]
+        if len(inputs) != 1 or len(outputs) != 1:
             raise RuntimeError("Engine must have exactly one input and one output tensor.")
+        self._input_name, output_name = inputs[0], outputs[0]
+
+        input_shape = tuple(engine.get_tensor_shape(self._input_name))
+        self._dynamic_batch = input_shape[0] == -1
+        if self._dynamic_batch:
+            # Size the buffers for the largest batch in the optimisation profile.
+            input_shape = tuple(engine.get_tensor_profile_shape(self._input_name, 0)[2])
+        context.set_input_shape(self._input_name, input_shape)
+        output_shape = tuple(context.get_tensor_shape(output_name))
+
+        self._input = torch.empty(
+            input_shape,
+            dtype=_TORCH_DTYPES[engine.get_tensor_dtype(self._input_name)],
+            device="cuda",
+        )
+        self._output = torch.empty(
+            output_shape, dtype=_TORCH_DTYPES[engine.get_tensor_dtype(output_name)], device="cuda"
+        )
+        context.set_tensor_address(self._input_name, self._input.data_ptr())
+        context.set_tensor_address(output_name, self._output.data_ptr())
+        self._max_batch = int(input_shape[0])
 
         self._input_size = int(self._input.shape[2])
         self._labels = parse_names(metadata.get("names"))
@@ -98,11 +112,14 @@ class TensorRTBackend(ExportedBackend):
     def _forward(self, tensor: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
         assert self._context is not None and self._stream is not None
         assert self._input is not None and self._output is not None
+        n = tensor.shape[0]
         with torch.cuda.stream(self._stream):
-            self._input.copy_(torch.from_numpy(tensor).to(self._input.dtype))
+            if self._dynamic_batch:
+                self._context.set_input_shape(self._input_name, tensor.shape)
+            self._input[:n].copy_(torch.from_numpy(tensor).to(self._input.dtype))
             if not self._context.execute_async_v3(self._stream.cuda_stream):
                 raise RuntimeError("TensorRT execution failed.")
-            output = self._output.float().cpu()
+            output = self._output[:n].float().cpu()
         self._stream.synchronize()
         return output.numpy()
 

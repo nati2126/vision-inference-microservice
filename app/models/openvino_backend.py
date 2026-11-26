@@ -52,8 +52,9 @@ class OpenVINOBackend(ExportedBackend):
             },
         )
 
-        height = model.input(0).get_partial_shape()[2]
-        self._input_size = height.get_length() if height.is_static else 640
+        shape = model.input(0).get_partial_shape()
+        self._input_size = shape[2].get_length() if shape[2].is_static else 640
+        self._max_batch = shape[0].get_length() if shape[0].is_static else None
         self._labels = parse_names(names)
         executed = str(compiled.get_property("INFERENCE_PRECISION_HINT")).lower()
         self._precision = (

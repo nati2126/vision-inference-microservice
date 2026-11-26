@@ -69,8 +69,13 @@ class OnnxRuntimeBackend(ExportedBackend):
 
         model_input = session.get_inputs()[0]
         self._input_name = model_input.name
-        height = model_input.shape[2]
+        batch, _, height, _ = model_input.shape
         self._input_size = height if isinstance(height, int) else 640
+        self._max_batch = batch if isinstance(batch, int) else None
+        if self.device == "cuda":
+            # The CUDA provider re-plans every conv when the input shape changes
+            # (~100 ms per change here), so varying batch sizes cost more than they save.
+            self._max_batch = 1
         self._labels = parse_names(session.get_modelmeta().custom_metadata_map.get("names"))
         self._precision = onnx_precision(self.model_path)
         self._session = session

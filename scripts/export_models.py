@@ -19,6 +19,9 @@ from benchmark.coco128 import ensure_coco128, image_paths
 
 INPUT_SIZE = 640
 OPSET = 17
+# TensorRT needs a batch range at build time; ONNX and OpenVINO take any batch size.
+TRT_MAX_BATCH = 16
+TRT_OPT_BATCH = 8
 
 # The Detect head's decode tail stays FP32: its final Concat mixes 0-640 px boxes
 # with 0-1 scores, and one UInt8 scale over that range rounds every score to 0.
@@ -57,16 +60,29 @@ def export_onnx_fp32(models_dir: Path, force: bool) -> Path:
         return onnx_path
 
     model = YOLO(str(models_dir / "yolov8n.pt"))
-    exported = model.export(
-        format="onnx",
-        imgsz=INPUT_SIZE,
-        opset=OPSET,
-        dynamic=False,
-        simplify=False,
-        # A "cpu" string would hide the GPU from the later TensorRT build.
-        device=torch.device("cpu"),
+    exported = Path(
+        model.export(
+            format="onnx",
+            imgsz=INPUT_SIZE,
+            opset=OPSET,
+            # A static export hardcodes batch 1 into the head's reshapes.
+            dynamic=True,
+            simplify=False,
+            # A "cpu" string would hide the GPU from the later TensorRT build.
+            device=torch.device("cpu"),
+        )
     )
-    return Path(exported)
+    _pin_spatial_dims(exported)
+    return exported
+
+
+def _pin_spatial_dims(onnx_path: Path) -> None:
+    """Keep the batch dimension dynamic but fix height and width to INPUT_SIZE."""
+    model = onnx.load(str(onnx_path))
+    dims = model.graph.input[0].type.tensor_type.shape.dim
+    for dim in dims[2:]:
+        dim.dim_value = INPUT_SIZE
+    onnx.save(model, str(onnx_path))
 
 
 class _CalibrationReader:
@@ -109,7 +125,8 @@ def export_onnx_int8(
 
     prepared = int8_path.parent / ".cache" / "yolov8n_prepared.onnx"
     prepared.parent.mkdir(parents=True, exist_ok=True)
-    quant_pre_process(str(fp32_path), str(prepared))
+    # ORT's symbolic shape inference cannot resolve the dynamic-batch head.
+    quant_pre_process(str(fp32_path), str(prepared), skip_symbolic_shape=True)
 
     graph = onnx.load(str(prepared))
     head_tail = [
@@ -184,6 +201,16 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
     config = builder.create_builder_config()
     config.set_flag(trt.BuilderFlag.FP16)
 
+    input_name = network.get_input(0).name
+    profile = builder.create_optimization_profile()
+    profile.set_shape(
+        input_name,
+        (1, 3, INPUT_SIZE, INPUT_SIZE),
+        (TRT_OPT_BATCH, 3, INPUT_SIZE, INPUT_SIZE),
+        (TRT_MAX_BATCH, 3, INPUT_SIZE, INPUT_SIZE),
+    )
+    config.add_optimization_profile(profile)
+
     cache_path = models_dir / ".cache" / "tensorrt_timing.cache"
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache = config.create_timing_cache(cache_path.read_bytes() if cache_path.exists() else b"")
@@ -203,6 +230,7 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
             {
                 "precision": "fp16",
                 "input_size": INPUT_SIZE,
+                "max_batch_size": TRT_MAX_BATCH,
                 "names": _names_metadata(onnx_path),
                 "source": onnx_path.name,
                 "tensorrt_version": trt.__version__,
