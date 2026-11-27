@@ -1,7 +1,7 @@
 {
   "date": "2026-11-26",
   "before_commit": "ff4df49",
-  "after_commit": "4d21f97",
+  "after_commit": "878fb0f",
   "method": "Interleaved per config (before, then after), 200 POST /api/v1/detect requests per concurrency level, 5 warm-up, same 640x480 coco128 JPEG, uvicorn 1 worker, httpx async client on the same machine.",
   "rows": [
     {
