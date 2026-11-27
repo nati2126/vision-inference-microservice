@@ -63,8 +63,8 @@ class DetectionService:
     def warm_up(self) -> None:
         """Run each batch size once, so no request pays for per-shape setup.
 
-        ONNX Runtime's CUDA provider autotunes cuDNN for every new input shape
-        (about 150 ms each here), and OpenVINO prepares each new shape too.
+        OpenVINO prepares each new input shape on first use (about 80-100 ms
+        each here).
         """
         if self._max_batch == 1:
             return
