@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     batch_max_size: int = Field(default=8, ge=1)
     # How long a batch waits to fill; 0 only takes requests that are already queued.
     batch_timeout_ms: float = Field(default=0.0, ge=0.0)
+    # Detect requests served at once (reading, decoding, queued or in the model);
+    # beyond this the server answers 503 with Retry-After instead of queueing.
+    max_in_flight_requests: int = Field(default=64, ge=1)
 
     # JSON list, e.g. CORS_ALLOW_ORIGINS='["https://app.example.com"]'.
     cors_allow_origins: list[str] = ["*"]
