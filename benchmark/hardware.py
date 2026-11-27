@@ -101,6 +101,8 @@ def collect() -> dict[str, Any]:
         "ram_gb": round(psutil.virtual_memory().total / 1e9, 1),
         "gpu": gpu_info(),
         "on_ac_power": None if battery is None else bool(battery.power_plugged),
+        # Other programs' load moves CPU results by tens of percent on a desktop machine.
+        "cpu_busy_before_run_pct": round(psutil.cpu_percent(interval=3.0), 1),
         "python": platform.python_version(),
         "packages": versions,
         "git_commit": commit or None,

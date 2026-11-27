@@ -25,9 +25,11 @@ def hardware_line(report: dict[str, Any]) -> str:
     power = {True: "on AC power", False: "ON BATTERY", None: "power state unknown"}[
         hw.get("on_ac_power")
     ]
+    busy = hw.get("cpu_busy_before_run_pct")
+    load = "" if busy is None else f", CPU {busy}% busy with other programs before the run"
     return (
         f"{hw['cpu']} ({hw['cpu_cores_physical']} cores / {hw['cpu_cores_logical']} threads), "
-        f"{hw['ram_gb']} GB RAM, {gpu}, {hw['os']}, Python {hw['python']}, {power}"
+        f"{hw['ram_gb']} GB RAM, {gpu}, {hw['os']}, Python {hw['python']}, {power}{load}"
     )
 
 
