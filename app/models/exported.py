@@ -2,6 +2,7 @@
 
 from abc import abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -12,7 +13,9 @@ from app.models.processing import LetterboxInfo, postprocess, preprocess
 
 @dataclass(frozen=True, slots=True)
 class PreparedImage:
-    tensor: npt.NDArray[np.float32]
+    # (1, 3, size, size): a NumPy array, or a CUDA tensor for backends that
+    # preprocess on the GPU.
+    tensor: Any
     letterbox: LetterboxInfo
     original_shape: tuple[int, int]
 
@@ -39,27 +42,27 @@ class ExportedBackend(InferenceBackend):
         tensor, info = preprocess(image, self._input_size)
         return PreparedImage(tensor, info, (image.shape[0], image.shape[1]))
 
-    def infer(self, inputs: PreparedImage) -> npt.NDArray[np.float32]:
+    def infer(self, inputs: PreparedImage) -> Any:
         return self.infer_batch([inputs])[0]
 
-    def infer_batch(self, batch: list[PreparedImage]) -> list[npt.NDArray[np.float32]]:
+    def infer_batch(self, batch: list[PreparedImage]) -> list[Any]:
         self._require_loaded()
         if self._max_batch is not None and len(batch) > self._max_batch:
             raise ValueError(
                 f"batch of {len(batch)} exceeds this model's maximum of {self._max_batch}"
             )
-        tensors = [inputs.tensor for inputs in batch]
-        # A single image needs no 4.9 MB copy into a new batch array.
-        outputs = self._forward(tensors[0] if len(tensors) == 1 else np.concatenate(tensors))
+        outputs = self._forward_batch([inputs.tensor for inputs in batch])
         return [outputs[i : i + 1] for i in range(len(batch))]
+
+    def _forward_batch(self, tensors: list[Any]) -> Any:
+        # A single image needs no 4.9 MB copy into a new batch array.
+        return self._forward(tensors[0] if len(tensors) == 1 else np.concatenate(tensors))
 
     @property
     def max_batch_size(self) -> int | None:
         return self._max_batch
 
-    def postprocess(
-        self, outputs: npt.NDArray[np.float32], inputs: PreparedImage
-    ) -> list[Detection]:
+    def postprocess(self, outputs: Any, inputs: PreparedImage) -> list[Detection]:
         return postprocess(
             outputs,
             inputs.letterbox,
