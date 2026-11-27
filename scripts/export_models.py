@@ -44,11 +44,20 @@ def _importable(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
 
 
-def _should_build(path: Path, force: bool) -> bool:
-    if path.exists() and not force:
-        print(f"  {path.name} exists, reusing (pass --force to rebuild)")
-        return False
-    return True
+def _should_build(path: Path, force: bool, source: Path | None = None) -> bool:
+    """Build if missing, forced, or older than the file it is built from."""
+    if not path.exists() or force:
+        return True
+    if source is not None and source.stat().st_mtime > path.stat().st_mtime:
+        print(f"  {path.name} is older than {source.name}, rebuilding")
+        return True
+    print(f"  {path.name} exists, reusing (pass --force to rebuild)")
+    return False
+
+
+def _has_fixed_batch(onnx_path: Path) -> bool:
+    model = onnx.load(str(onnx_path), load_external_data=False)
+    return bool(model.graph.input[0].type.tensor_type.shape.dim[0].HasField("dim_value"))
 
 
 def export_onnx_fp32(models_dir: Path, force: bool) -> Path:
@@ -56,6 +65,10 @@ def export_onnx_fp32(models_dir: Path, force: bool) -> Path:
     from ultralytics import YOLO
 
     onnx_path = models_dir / "yolov8n.onnx"
+    if onnx_path.exists() and not force and _has_fixed_batch(onnx_path):
+        # Exported before batching; everything built from it is rebuilt too.
+        print(f"  {onnx_path.name} has a fixed batch size, re-exporting")
+        force = True
     if not _should_build(onnx_path, force):
         return onnx_path
 
@@ -120,7 +133,7 @@ def export_onnx_int8(
     )
     from onnxruntime.quantization.shape_inference import quant_pre_process
 
-    if not _should_build(int8_path, force):
+    if not _should_build(int8_path, force, source=fp32_path):
         return int8_path
 
     prepared = int8_path.parent / ".cache" / "yolov8n_prepared.onnx"
@@ -168,7 +181,7 @@ def export_openvino(onnx_path: Path, out_dir: Path, force: bool) -> Path:
     from app.models.openvino_backend import NAMES_RT_INFO_KEY
 
     xml_path = out_dir / f"{onnx_path.stem}.xml"
-    if not _should_build(xml_path, force):
+    if not _should_build(xml_path, force, source=onnx_path):
         return xml_path
 
     model = ov.convert_model(str(onnx_path))
@@ -187,7 +200,7 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
     from app.models.tensorrt_backend import engine_metadata_path
 
     engine_path = models_dir / "yolov8n_fp16.engine"
-    if not _should_build(engine_path, force):
+    if not _should_build(engine_path, force, source=onnx_path):
         return engine_path
 
     logger = trt.Logger(trt.Logger.WARNING)

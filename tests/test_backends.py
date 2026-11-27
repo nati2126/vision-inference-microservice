@@ -213,7 +213,9 @@ def test_exported_artifacts_accept_batches(
     if case.backend == "pytorch" or case.id == "onnxruntime-cuda-fp32":
         assert limit == 1
     else:
-        assert limit is None or limit >= 8, f"{case.artifact} was exported with a fixed batch"
+        assert (
+            limit is None or limit >= 8
+        ), f"{case.artifact} was exported with a fixed batch; re-run python -m scripts.export_models"
 
 
 def test_batched_inference_matches_single_images(
