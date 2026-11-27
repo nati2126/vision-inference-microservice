@@ -1,7 +1,7 @@
 # COCO val2017 accuracy
 
 - **Hardware:** Intel(R) Core(TM) i9-14900HX (24 cores / 32 threads), 34.1 GB RAM, NVIDIA GeForce RTX 4070 Laptop GPU (8.6 GB), Windows 11 (build 10.0.26200), Python 3.11.14, on AC power, CPU 8.5% busy with other programs before the run
-- **Generated:** 2026-11-27T10:30:55+00:00, commit `3d8c1fc`, took 3706s
+- **Generated:** 2026-11-27T10:30:55+00:00, commit `50f9ec4`, took 3706s
 - **Data:** COCO val2017, 5000 images, conf 0.001, NMS IoU 0.7, max 300 detections, one class per box. Exported models take a 640x640 letterbox; PyTorch takes ultralytics' minimal rectangle (640x480 for a 4:3 image).
 - **Scoring:** pycocotools (`COCOeval`, bbox), which keeps the top 100 detections per image and ignores detections on crowd regions. The in-house column is this repository's `DetectionEvaluator` on the same detections: all 300, non-crowd ground truth only, so detections on crowds count as false positives.
 - **Images/s** is the evaluation loop (disk read, decode, `predict()` at conf 0.001), batch 1; it is not the latency benchmark.
