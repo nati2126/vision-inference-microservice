@@ -36,7 +36,9 @@ class DetectionService:
 
     With batch_timeout_ms=0 nothing waits for a batch to fill: a request that
     arrives while the model is idle runs alone, and requests that queue up
-    behind a running call share the next one, up to max_batch_size.
+    behind a running call share the next one, up to max_batch_size. With a
+    batch size of 1 a lock serialises the model call instead, which measured
+    a few percent faster than the worker.
     """
 
     def __init__(
@@ -55,6 +57,7 @@ class DetectionService:
         self._batch_timeout_s = batch_timeout_ms / 1000
         self._queue: asyncio.Queue[_Pending] | None = None
         self._worker: asyncio.Task[None] | None = None
+        self._lock = asyncio.Lock()
 
     @property
     def max_batch_size(self) -> int:
@@ -118,6 +121,11 @@ class DetectionService:
         }
 
     async def _submit(self, inputs: Any) -> tuple[Any, float, int]:
+        if self._max_batch == 1:
+            async with self._lock:
+                start = time.perf_counter()
+                output = await run_in_threadpool(self._model.infer, inputs)
+                return output, time.perf_counter() - start, 1
         if self._worker is None:
             # Created on first use so the queue and task belong to the serving loop.
             self._queue = asyncio.Queue()
