@@ -48,7 +48,9 @@ class ExportedBackend(InferenceBackend):
             raise ValueError(
                 f"batch of {len(batch)} exceeds this model's maximum of {self._max_batch}"
             )
-        outputs = self._forward(np.concatenate([inputs.tensor for inputs in batch]))
+        tensors = [inputs.tensor for inputs in batch]
+        # A single image needs no 4.9 MB copy into a new batch array.
+        outputs = self._forward(tensors[0] if len(tensors) == 1 else np.concatenate(tensors))
         return [outputs[i : i + 1] for i in range(len(batch))]
 
     @property
