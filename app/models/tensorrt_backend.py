@@ -46,6 +46,7 @@ class TensorRTBackend(ExportedBackend):
         self._output: torch.Tensor | None = None
         self._input_name = ""
         self._dynamic_batch = False
+        self._bound_batch = 0
 
     def load(self) -> None:
         logger.info("loading_model", backend=self.name, path=self.model_path, device=self.device)
@@ -90,7 +91,7 @@ class TensorRTBackend(ExportedBackend):
         )
         context.set_tensor_address(self._input_name, self._input.data_ptr())
         context.set_tensor_address(output_name, self._output.data_ptr())
-        self._max_batch = int(input_shape[0])
+        self._max_batch = self._bound_batch = int(input_shape[0])
 
         self._input_size = int(self._input.shape[2])
         self._labels = parse_names(metadata.get("names"))
@@ -114,8 +115,9 @@ class TensorRTBackend(ExportedBackend):
         assert self._input is not None and self._output is not None
         n = tensor.shape[0]
         with torch.cuda.stream(self._stream):
-            if self._dynamic_batch:
+            if self._dynamic_batch and n != self._bound_batch:
                 self._context.set_input_shape(self._input_name, tensor.shape)
+                self._bound_batch = n
             self._input[:n].copy_(torch.from_numpy(tensor).to(self._input.dtype))
             if not self._context.execute_async_v3(self._stream.cuda_stream):
                 raise RuntimeError("TensorRT execution failed.")
