@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import os
+import shutil
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -20,7 +21,9 @@ from benchmark.coco128 import ensure_coco128, image_paths
 INPUT_SIZE = 640
 OPSET = 17
 # TensorRT needs a batch range at build time; ONNX and OpenVINO take any batch size.
-TRT_MAX_BATCH = 16
+# Batch 1 by default: one server process is CPU-bound before a batched engine pays off
+# (benchmark/results/*-batching-ab.md), and the batch-16 profile costs GPU memory.
+TRT_DEFAULT_MAX_BATCH = 1
 TRT_OPT_BATCH = 8
 
 # The Detect head's decode tail stays FP32: its final Concat mixes 0-640 px boxes
@@ -61,9 +64,6 @@ def _has_fixed_batch(onnx_path: Path) -> bool:
 
 
 def export_onnx_fp32(models_dir: Path, force: bool) -> Path:
-    import torch
-    from ultralytics import YOLO
-
     onnx_path = models_dir / "yolov8n.onnx"
     if onnx_path.exists() and not force and _has_fixed_batch(onnx_path):
         # Exported before batching; everything built from it is rebuilt too.
@@ -72,21 +72,28 @@ def export_onnx_fp32(models_dir: Path, force: bool) -> Path:
     if not _should_build(onnx_path, force):
         return onnx_path
 
-    model = YOLO(str(models_dir / "yolov8n.pt"))
-    exported = Path(
-        model.export(
+    # A static export hardcodes batch 1 into the head's reshapes.
+    exported = _ultralytics_onnx(models_dir / "yolov8n.pt", dynamic=True)
+    _pin_spatial_dims(exported)
+    return exported
+
+
+def _ultralytics_onnx(pt_path: Path, dynamic: bool) -> Path:
+    """Export pt_path to ONNX next to it (ultralytics names the file after the .pt)."""
+    import torch
+    from ultralytics import YOLO
+
+    return Path(
+        YOLO(str(pt_path)).export(
             format="onnx",
             imgsz=INPUT_SIZE,
             opset=OPSET,
-            # A static export hardcodes batch 1 into the head's reshapes.
-            dynamic=True,
+            dynamic=dynamic,
             simplify=False,
             # A "cpu" string would hide the GPU from the later TensorRT build.
             device=torch.device("cpu"),
         )
     )
-    _pin_spatial_dims(exported)
-    return exported
 
 
 def _pin_spatial_dims(onnx_path: Path) -> None:
@@ -192,14 +199,24 @@ def export_openvino(onnx_path: Path, out_dir: Path, force: bool) -> Path:
     return xml_path
 
 
-def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path:
-    """Build an FP16 engine; it only runs on this GPU and TensorRT version."""
+def export_tensorrt_fp16(
+    onnx_path: Path, models_dir: Path, force: bool, max_batch: int = TRT_DEFAULT_MAX_BATCH
+) -> Path:
+    """Build an FP16 engine for batches up to max_batch; it only runs on this GPU and TensorRT."""
     import tensorrt as trt
     import torch
 
     from app.models.tensorrt_backend import engine_metadata_path
 
     engine_path = models_dir / "yolov8n_fp16.engine"
+    metadata_path = engine_metadata_path(engine_path)
+    if engine_path.exists() and not force and metadata_path.exists():
+        built_for = json.loads(metadata_path.read_text(encoding="utf-8")).get("max_batch_size")
+        if built_for != max_batch:
+            print(
+                f"  {engine_path.name} was built for batch {built_for}, rebuilding for {max_batch}"
+            )
+            force = True
     if not _should_build(engine_path, force, source=onnx_path):
         return engine_path
 
@@ -207,7 +224,16 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
     builder = trt.Builder(logger)
     network = builder.create_network(0)
     parser = trt.OnnxParser(network, logger)
-    if not parser.parse(onnx_path.read_bytes()):
+    source = onnx_path
+    if max_batch == 1:
+        # The dynamic export computes the head's anchors at run time; an engine built from it
+        # is ~5% slower at batch 1 than one built from a static export, even with the batch
+        # fixed. The static export goes to .cache so it never replaces the dynamic ONNX.
+        static_pt = models_dir / ".cache" / "yolov8n_static.pt"
+        static_pt.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(models_dir / "yolov8n.pt", static_pt)
+        source = _ultralytics_onnx(static_pt, dynamic=False)
+    if not parser.parse(source.read_bytes()):
         errors = [str(parser.get_error(i)) for i in range(parser.num_errors)]
         raise RuntimeError(f"TensorRT could not parse {onnx_path}: {errors}")
 
@@ -219,8 +245,8 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
     profile.set_shape(
         input_name,
         (1, 3, INPUT_SIZE, INPUT_SIZE),
-        (TRT_OPT_BATCH, 3, INPUT_SIZE, INPUT_SIZE),
-        (TRT_MAX_BATCH, 3, INPUT_SIZE, INPUT_SIZE),
+        (min(TRT_OPT_BATCH, max_batch), 3, INPUT_SIZE, INPUT_SIZE),
+        (max_batch, 3, INPUT_SIZE, INPUT_SIZE),
     )
     config.add_optimization_profile(profile)
 
@@ -238,14 +264,14 @@ def export_tensorrt_fp16(onnx_path: Path, models_dir: Path, force: bool) -> Path
 
     engine_path.write_bytes(bytes(serialized))
     cache_path.write_bytes(bytes(config.get_timing_cache().serialize()))
-    engine_metadata_path(engine_path).write_text(
+    metadata_path.write_text(
         json.dumps(
             {
                 "precision": "fp16",
                 "input_size": INPUT_SIZE,
-                "max_batch_size": TRT_MAX_BATCH,
+                "max_batch_size": max_batch,
                 "names": _names_metadata(onnx_path),
-                "source": onnx_path.name,
+                "source": source.name,
                 "tensorrt_version": trt.__version__,
                 "gpu": torch.cuda.get_device_name(0),
                 "build_seconds": round(build_seconds, 1),
@@ -266,6 +292,12 @@ def main() -> None:
         "--skip", nargs="*", default=[], choices=["openvino", "tensorrt"], help="formats to skip"
     )
     parser.add_argument("--force", action="store_true", help="rebuild existing artifacts")
+    parser.add_argument(
+        "--trt-max-batch",
+        type=int,
+        default=TRT_DEFAULT_MAX_BATCH,
+        help="largest batch the TensorRT engine accepts (default %(default)s)",
+    )
     parser.add_argument(
         "--int8-naive",
         action="store_true",
@@ -305,7 +337,9 @@ def main() -> None:
         print("[4/5] TensorRT: skipped")
     elif _importable("tensorrt"):
         print("[4/5] TensorRT FP16")
-        artifacts["TensorRT FP16"] = export_tensorrt_fp16(fp32, models_dir, args.force)
+        artifacts["TensorRT FP16"] = export_tensorrt_fp16(
+            fp32, models_dir, args.force, args.trt_max_batch
+        )
     else:
         print("[4/5] TensorRT: not installed (pip install '.[tensorrt]'), skipped")
 
