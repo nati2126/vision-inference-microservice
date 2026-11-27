@@ -35,9 +35,9 @@ app/
 │   ├── processing.py     #   letterbox, decode, NMS, rescale (NumPy)
 │   ├── factory.py        #   MODEL_BACKEND -> backend (lazy imports)
 │   └── *_backend.py      #   pytorch, onnxruntime, openvino, tensorrt
-└── core/                 # Config, logging
+└── core/                 # Config, logging, Prometheus metrics, load shedding
 scripts/export_models.py  # .pt -> ONNX FP32 / INT8, OpenVINO IR, TensorRT engine
-benchmark/                # accuracy, latency, memory and HTTP benchmark
+benchmark/                # accuracy, latency, memory and HTTP benchmark; overload test
 ```
 
 | Layer | Responsibility |
@@ -45,7 +45,7 @@ benchmark/                # accuracy, latency, memory and HTTP benchmark
 | **API** | HTTP routing, input validation, error mapping |
 | **Service** | Size-capped upload, image decoding, off-loop inference, metadata |
 | **Model** | `InferenceBackend`: `load()`, `predict(image) -> list[Detection]`, `name`, `precision` |
-| **Core** | Configuration (12-factor), structured logging |
+| **Core** | Configuration (12-factor), structured logging, metrics, admission control |
 
 ---
 
@@ -189,6 +189,7 @@ python -m scripts.export_models                 # first TensorRT build: ~8 min
 python -m scripts.export_models --trt-max-batch 16   # a TensorRT engine that batches
 python -m benchmark.run_benchmark               # full: ~11 min here
 python -m benchmark.run_benchmark --quick       # smoke run: ~3 min here
+python -m benchmark.overload                    # load shedding under overload: ~4 min
 ```
 
 Backends whose package, artifact or GPU is missing are listed as skipped. Each
@@ -271,6 +272,14 @@ of the decode code. On the same ONNX file it matches ultralytics bit for bit.
   With varying batch sizes, throughput at concurrency 8 fell from 59.8 to
   27.0 req/s, so the backend reports a batch limit of 1. TensorRT pays about
   3 ms per change; ONNX Runtime on the CPU and OpenVINO pay nothing measurable.
+- **Overload is shed, not queued.** Past `MAX_IN_FLIGHT_REQUESTS` (64), the
+  detect endpoint answers 503 with `Retry-After` before parsing the upload.
+  With 256 clients against the ONNX Runtime CPU backend (about 30 req/s),
+  served requests took 1.9 s p50 instead of 7.2 s, for 1–2% less goodput
+  ([`benchmark/results/i9-14900hx_rtx-4070-laptop-load-shedding.md`](benchmark/results/i9-14900hx_rtx-4070-laptop-load-shedding.md)).
+  The middleware reads and discards a rejected upload before answering: over
+  a real socket, an unread upload left the client blocked mid-send and the
+  request hung.
 - **HTTP adds about 6–10 ms** per request over `predict()` at concurrency 1
   (ONNX Runtime CPU: 55.0 vs 48.9 ms p50 here, 52.3 vs 42.4 in the run before).
 
@@ -304,6 +313,11 @@ every other CUDA library loaded afterwards; the PyTorch backend passes a
   minus the level before loading. CUDA rows also include the CUDA context
   and, for ONNX Runtime on CUDA, importing torch to load the CUDA libraries.
 - **The HTTP client shares the machine** with the server and takes CPU from it.
+- **The in-flight limit is a count, not a deadline.** 64 requests is about 2 s
+  of queue on a CPU backend and well under 1 s on TensorRT. Set
+  `MAX_IN_FLIGHT_REQUESTS` from your backend's throughput and latency budget.
+  There is no authentication or per-client rate limiting; put the service
+  behind a gateway for that.
 - **CI covers CPU only** (PyTorch and ONNX Runtime). OpenVINO, TensorRT and the
   CUDA paths are tested locally; their tests skip on the CI runner.
 - **No TensorRT INT8 and no INT8 on CUDA**; INT8 here is CPU-only.
@@ -332,6 +346,25 @@ Probes for orchestrators, outside the versioned API. `/livez` returns 200
 `{"status": "ok"}` while the process serves requests. `/readyz` returns 200
 `{"status": "ready"}` once the model is loaded and 503 `{"status": "not_ready"}`
 otherwise; the Docker and Compose health checks use it.
+
+### `GET /metrics`
+
+Prometheus text format:
+
+| Metric | Meaning |
+|---|---|
+| `vision_detect_requests_total{status}` | Detect responses by HTTP status, including 503 rejections |
+| `vision_detect_request_duration_seconds` | Histogram: accepted detect request to last response byte |
+| `vision_detect_in_flight_requests` | Detect requests accepted and not yet answered |
+| `vision_detect_rejected_total` | Requests turned away at `MAX_IN_FLIGHT_REQUESTS` |
+| `vision_model_queue_wait_seconds` | Histogram: preprocessed request waiting for its model call |
+| `vision_model_call_duration_seconds` | Histogram: one model call (a whole batch) |
+| `vision_model_batch_size` | Histogram: requests served per model call |
+| `vision_model_info{backend,device,precision,max_batch_size}` | The loaded model (always 1) |
+
+Under load, queue wait rising while the model call stays flat means the
+server is past capacity. Batch sizes near `BATCH_MAX_SIZE` mean batching is
+doing its job.
 
 ### `POST /api/v1/detect`
 
@@ -377,6 +410,7 @@ Failures return the `ErrorResponse` envelope:
 | `400` | Unsupported content type, undecodable image, empty body, or over `MAX_UPLOAD_BYTES` / `MAX_IMAGE_PIXELS` |
 | `422` | Malformed request (e.g. no file field) |
 | `500` | Inference failure: details are logged, never returned |
+| `503` | `MAX_IN_FLIGHT_REQUESTS` detect requests already in flight; carries `Retry-After: 1` |
 
 Interactive docs: [`/docs`](http://localhost:8000/docs) (Swagger UI),
 [`/redoc`](http://localhost:8000/redoc).
@@ -400,6 +434,7 @@ All settings come from environment variables (see [`.env.example`](.env.example)
 | `MAX_IMAGE_PIXELS` | `50000000` | Largest accepted width x height, read from the image header before decoding |
 | `BATCH_MAX_SIZE` | `8` | Most queued requests run as one model call; `1` turns batching off. Capped by the model (`max_batch_size` in `/health`) |
 | `BATCH_TIMEOUT_MS` | `0` | How long a model call waits for more requests. `0` only takes those already queued, so a lone request is never delayed |
+| `MAX_IN_FLIGHT_REQUESTS` | `64` | Detect requests served at once; beyond it the server answers 503 with `Retry-After` instead of queueing. About 2 s of queue for a CPU backend at 30 req/s |
 | `CORS_ALLOW_ORIGINS` | `["*"]` | Allowed origins, as a JSON list |
 | `CORS_ALLOW_CREDENTIALS` | `false` | Ignored while origins is `["*"]`, since browsers reject that pairing |
 | `LOG_LEVEL` | `INFO` | Logging severity |
