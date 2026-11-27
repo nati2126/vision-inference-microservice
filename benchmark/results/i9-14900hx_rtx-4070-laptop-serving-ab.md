@@ -1,7 +1,7 @@
 # Serving path A/B: inference lock scope
 
 Before: `ff4df49` (decode on the event loop; letterbox, model call and NMS all under the
-inference lock). After: `4d21f97` (decode and pre/post-processing in the thread pool; only
+inference lock). After: `878fb0f` (decode and pre/post-processing in the thread pool; only
 the model call under the lock).
 
 Same machine as `i9-14900hx_rtx-4070-laptop.md`, measured 2026-11-26. For each config the

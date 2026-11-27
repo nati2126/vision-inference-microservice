@@ -8,7 +8,7 @@ differ between tables because the machine's background load did.
 
 ## Where batching is on: ONNX Runtime and OpenVINO on the CPU
 
-ONNX Runtime FP32 on the CPU against main (commit `d2765e8`; the batching path has not
+ONNX Runtime FP32 on the CPU against main (commit `c596d9c`; the batching path has not
 changed since):
 
 | Server | c=1 req/s | c=8 req/s | c=32 req/s |
@@ -29,7 +29,7 @@ Batching off vs on in the published full run (`i9-14900hx_rtx-4070-laptop.json`,
 | openvino-cpu-fp32 | 14.7 / 14.4 | 21.4 / 25.0 | +17% | 20.9 / 26.0 | +24% | 1593.8 / 1320.3 |
 | openvino-cpu-int8 | 19.9 / 19.4 | 29.4 / 29.9 | +2% | 29.3 / 33.3 | +14% | 1160.2 / 1034.5 |
 
-That run's gains are smaller than in the A/B above and in the run before it at `d2765e8`
+That run's gains are smaller than in the A/B above and in the run before it at `c596d9c`
 (ONNX Runtime FP32 +21% / +28%, OpenVINO INT8 +3% / +9%). Right after it, the CPU was 18.5%
 busy with other programs (mostly a web browser), and CPU-bound serving is where that
 shows. OpenVINO results vary the most between runs: it already spreads one image across
@@ -50,7 +50,7 @@ batch limit of 1 the service serialises with a lock instead of the worker. Again
 
 Level with main.
 
-### Why: the batch-16 engine (`--trt-max-batch 16`, commit `d2765e8`)
+### Why: the batch-16 engine (`--trt-max-batch 16`, commit `c596d9c`)
 
 | Server | c=1 req/s | c=8 req/s | c=32 req/s |
 |---|---:|---:|---:|
