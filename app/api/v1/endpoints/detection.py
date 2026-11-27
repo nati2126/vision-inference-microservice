@@ -25,6 +25,10 @@ _ALLOWED_CONTENT_TYPES = {
         400: {"model": ErrorResponse, "description": "Invalid input"},
         422: {"model": ErrorResponse, "description": "Validation error"},
         500: {"model": ErrorResponse, "description": "Internal server error"},
+        503: {
+            "model": ErrorResponse,
+            "description": "MAX_IN_FLIGHT_REQUESTS already in flight; retry after Retry-After",
+        },
     },
     summary="Run object detection",
     description="Upload an image file (JPEG, PNG) and receive detected objects.",

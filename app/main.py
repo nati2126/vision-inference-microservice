@@ -6,10 +6,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.v1.endpoints.health import probe_router
 from app.api.v1.router import router as v1_router
+from app.core import metrics
+from app.core.admission import AdmissionMiddleware
 from app.core.config import get_settings
 from app.core.logging import get_logger, setup_logging
 from app.models.factory import create_backend
@@ -49,6 +52,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         batch_timeout_ms=settings.batch_timeout_ms,
     )
     detection_service.warm_up()
+    metrics.MODEL_INFO.labels(
+        backend=settings.model_backend,
+        device=settings.model_device,
+        precision=model.precision,
+        max_batch_size=str(detection_service.max_batch_size),
+    ).set(1)
 
     app.state.settings = settings
     app.state.model = model
@@ -119,6 +128,12 @@ def create_app() -> FastAPI:
         )
         allow_credentials = False
 
+    # Added before CORS so CORS wraps it and 503s carry CORS headers too.
+    app.add_middleware(
+        AdmissionMiddleware,
+        path="/api/v1/detect",
+        max_in_flight=settings.max_in_flight_requests,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allow_origins,
@@ -131,6 +146,10 @@ def create_app() -> FastAPI:
 
     app.include_router(v1_router)
     app.include_router(probe_router)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def prometheus_metrics() -> Response:
+        return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     return app
 

@@ -14,6 +14,7 @@ from fastapi import UploadFile
 from PIL import Image, UnidentifiedImageError
 from starlette.concurrency import run_in_threadpool
 
+from app.core import metrics
 from app.core.logging import get_logger
 from app.models.base import Detection, InferenceBackend
 
@@ -26,6 +27,7 @@ _DECODE_ERROR = "Unable to decode the uploaded file as an image. Supported forma
 @dataclass
 class _Pending:
     inputs: Any
+    queued_at: float = field(default_factory=time.perf_counter)
     future: asyncio.Future[tuple[Any, float, int]] = field(
         default_factory=lambda: asyncio.get_running_loop().create_future()
     )
@@ -122,10 +124,15 @@ class DetectionService:
 
     async def _submit(self, inputs: Any) -> tuple[Any, float, int]:
         if self._max_batch == 1:
+            queued_at = time.perf_counter()
             async with self._lock:
                 start = time.perf_counter()
+                metrics.QUEUE_WAIT.observe(start - queued_at)
                 output = await run_in_threadpool(self._model.infer, inputs)
-                return output, time.perf_counter() - start, 1
+                infer_s = time.perf_counter() - start
+            metrics.MODEL_CALL.observe(infer_s)
+            metrics.BATCH_SIZE.observe(1)
+            return output, infer_s, 1
         if self._worker is None:
             # Created on first use so the queue and task belong to the serving loop.
             self._queue = asyncio.Queue()
@@ -145,11 +152,15 @@ class DetectionService:
                 continue
 
             start = time.perf_counter()
+            for p in batch:
+                metrics.QUEUE_WAIT.observe(start - p.queued_at)
+            metrics.BATCH_SIZE.observe(len(batch))
             try:
                 outputs = await run_in_threadpool(
                     self._model.infer_batch, [p.inputs for p in batch]
                 )
                 infer_s = time.perf_counter() - start
+                metrics.MODEL_CALL.observe(infer_s)
                 results = list(zip(batch, outputs, strict=True))
             except Exception as exc:
                 # The worker must survive, or every later request would hang.
