@@ -2,7 +2,7 @@
 
 The laptop in `i9-14900hx_rtx-4070-laptop.md`, 2026-11-27, default batch-1 FP16
 engine. "CPU" is the NumPy pipeline (commit `dbe9075`); "GPU" uploads the uint8 image
-and filters detections on the GPU (commit `96c3b40`). They ran interleaved, CPU then
+and filters detections on the GPU (commit `22e9f54`). They ran interleaved, CPU then
 GPU, twice, so drift on the laptop hits both alike. The CPU was 6.8% busy with other
 programs before the first round. Cells are round 1 / round 2.
 
@@ -31,7 +31,7 @@ Single-image `predict()` on coco128:
 ## Where the time went
 
 Medians of 300 calls in one process, after warm-up, the GPU columns from commit
-`96c3b40`. The two images are a 640x480 coco128 image and `bus.jpg` (810x1080):
+`22e9f54`. The two images are a 640x480 coco128 image and `bus.jpg` (810x1080):
 
 | Stage | CPU 640x480 | GPU 640x480 | CPU 810x1080 | GPU 810x1080 |
 |---|---:|---:|---:|---:|

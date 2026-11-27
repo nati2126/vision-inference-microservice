@@ -28,7 +28,7 @@
       "fastapi": "0.115.6",
       "uvicorn": "0.34.0"
     },
-    "git_commit": "96c3b40"
+    "git_commit": "22e9f54"
   },
   "settings": {
     "budget": {

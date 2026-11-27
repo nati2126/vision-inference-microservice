@@ -1,7 +1,7 @@
 # Benchmark results (full run)
 
 - **Hardware:** Intel(R) Core(TM) i9-14900HX (24 cores / 32 threads), 34.1 GB RAM, NVIDIA GeForce RTX 4070 Laptop GPU (8.6 GB), Windows 11 (build 10.0.26200), Python 3.11.14, on AC power, CPU 6.5% busy with other programs before the run
-- **Generated:** 2026-11-27T08:25:42+00:00, commit `96c3b40`, took 545s
+- **Generated:** 2026-11-27T08:25:42+00:00, commit `22e9f54`, took 545s
 - **Accuracy:** coco128 (first 128 images of COCO train2017), 128 images, conf 0.001, NMS IoU 0.7. A relative comparison between backends, not an official COCO result.
 - **Latency:** `predict()` end to end (preprocess + inference + postprocess), batch 1, 10 warm-up + 100 timed runs on one 640x480 image, serving thresholds (conf 0.25).
 - **Batching:** the model call alone (`infer_batch`, no pre/post-processing), 10 warm-up + 30 timed calls per batch size. PyTorch's call runs ultralytics' whole pipeline and only takes batch 1. Timed after the memory peaks were read, so the memory columns are for batch 1.
