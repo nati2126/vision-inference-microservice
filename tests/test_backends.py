@@ -244,6 +244,24 @@ def test_batched_inference_matches_single_images(
         _assert_confident_detections_match(batched, single, case.min_iou, case.max_conf_diff)
 
 
+def test_an_output_survives_the_next_model_call(
+    case_and_backend: tuple[Case, InferenceBackend],
+    bus_image: npt.NDArray[np.uint8],
+    zidane_image: npt.NDArray[np.uint8],
+) -> None:
+    # The service postprocesses outside the model lock, so another request's
+    # model call can run before this output is read.
+    _, backend = case_and_backend
+    bus = backend.preprocess(bus_image)
+    zidane = backend.preprocess(zidane_image)
+    expected = backend.postprocess(backend.infer(bus), bus)
+
+    bus_output = backend.infer(bus)
+    backend.infer(zidane)
+
+    assert backend.postprocess(bus_output, bus) == expected
+
+
 def test_batch_over_the_engine_limit_is_rejected(
     case_and_backend: tuple[Case, InferenceBackend], bus_image: npt.NDArray[np.uint8]
 ) -> None:

@@ -10,7 +10,9 @@ import tensorrt as trt
 import torch
 
 from app.core.logging import get_logger
-from app.models.exported import ExportedBackend
+from app.models.base import Detection
+from app.models.exported import ExportedBackend, PreparedImage
+from app.models.gpu_processing import postprocess_gpu, preprocess_gpu
 from app.models.labels import parse_names
 
 logger = get_logger(__name__)
@@ -42,6 +44,9 @@ class TensorRTBackend(ExportedBackend):
         self._engine: Any = None
         self._context: Any = None
         self._stream: torch.cuda.Stream | None = None
+        # Pre- and postprocessing, apart from the engine's stream so they do not
+        # wait behind another request's engine call.
+        self._io_stream: torch.cuda.Stream | None = None
         self._input: torch.Tensor | None = None
         self._output: torch.Tensor | None = None
         self._input_name = ""
@@ -98,6 +103,7 @@ class TensorRTBackend(ExportedBackend):
         self._precision = str(metadata.get("precision", "unknown"))
         self._engine, self._context = engine, context
         self._stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
+        self._io_stream = torch.cuda.Stream()  # type: ignore[no-untyped-call]
 
         self._warm_up()
         logger.info("model_loaded", backend=self.name, precision=self._precision)
@@ -106,24 +112,54 @@ class TensorRTBackend(ExportedBackend):
         self._context = None
         self._engine = None
         self._input = self._output = None
-        self._stream = None
+        self._stream = self._io_stream = None
         torch.cuda.empty_cache()
         logger.info("model_unloaded", backend=self.name)
 
+    def preprocess(self, image: npt.NDArray[np.uint8]) -> PreparedImage:
+        assert self._input is not None, "Model is not loaded. Call .load() first."
+        assert self._io_stream is not None
+        tensor, info = preprocess_gpu(image, self._input_size, self._input.dtype, self._io_stream)
+        return PreparedImage(tensor, info, (image.shape[0], image.shape[1]))
+
+    def _forward_batch(self, tensors: list[torch.Tensor]) -> torch.Tensor:
+        return self._run(tensors[0] if len(tensors) == 1 else torch.cat(tensors))
+
     def _forward(self, tensor: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+        assert self._input is not None
+        on_gpu = torch.from_numpy(tensor).to(self._input.device, self._input.dtype)
+        return np.asarray(self._run(on_gpu).cpu().numpy(), dtype=np.float32)
+
+    def _run(self, tensor: torch.Tensor) -> torch.Tensor:
+        """One engine call; returns a float32 copy of the output, still on the GPU."""
         assert self._context is not None and self._stream is not None
         assert self._input is not None and self._output is not None
         n = tensor.shape[0]
         with torch.cuda.stream(self._stream):
             if self._dynamic_batch and n != self._bound_batch:
-                self._context.set_input_shape(self._input_name, tensor.shape)
+                self._context.set_input_shape(self._input_name, tuple(tensor.shape))
                 self._bound_batch = n
-            self._input[:n].copy_(torch.from_numpy(tensor).to(self._input.dtype))
+            self._input[:n].copy_(tensor)
             if not self._context.execute_async_v3(self._stream.cuda_stream):
                 raise RuntimeError("TensorRT execution failed.")
-            output = self._output[:n].float().cpu()
+            # A copy, never a view: the next call overwrites the engine's buffer,
+            # possibly while this output is still being postprocessed.
+            output = self._output[:n].to(torch.float32, copy=True)
         self._stream.synchronize()
-        return output.numpy()
+        return output
+
+    def postprocess(self, outputs: torch.Tensor, inputs: PreparedImage) -> list[Detection]:
+        assert self._io_stream is not None
+        return postprocess_gpu(
+            outputs,
+            inputs.letterbox,
+            original_shape=inputs.original_shape,
+            labels=self._labels,
+            confidence_threshold=self.confidence_threshold,
+            iou_threshold=self.iou_threshold,
+            max_detections=self.max_detections,
+            stream=self._io_stream,
+        )
 
     @property
     def is_loaded(self) -> bool:
