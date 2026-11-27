@@ -20,7 +20,7 @@ changed since):
 Batching serves 16-23% more than main at concurrency 8 and 32, in both rounds.
 
 Batching off vs on in the published full run (`i9-14900hx_rtx-4070-laptop.json`, commit
-`c4f0111`), same server code with `BATCH_MAX_SIZE=1` and `=8`:
+`7001169`), same server code with `BATCH_MAX_SIZE=1` and `=8`:
 
 | Config | c=1 req/s off / on | c=8 req/s off / on | c=8 change | c=32 req/s off / on | c=32 change | c=32 p95 ms off / on |
 |---|---:|---:|---:|---:|---:|---:|
@@ -33,7 +33,7 @@ That run's gains are smaller than in the A/B above and in the run before it at `
 (ONNX Runtime FP32 +21% / +28%, OpenVINO INT8 +3% / +9%). Right after it, the CPU was 18.5%
 busy with other programs (mostly a web browser), and CPU-bound serving is where that
 shows. OpenVINO results vary the most between runs: it already spreads one image across
-all cores. A run before that one at `c4f0111` was discarded: its ONNX Runtime row without
+all cores. A run before that one at `7001169` was discarded: its ONNX Runtime row without
 batching was 20.7 req/s at concurrency 32 against 26.5-28.1 in five earlier runs, which
 would have overstated the gain.
 
@@ -41,7 +41,7 @@ would have overstated the gain.
 
 The default TensorRT engine takes batch 1 and is built from a static export, and at a
 batch limit of 1 the service serialises with a lock instead of the worker. Against main
-(commit `c4f0111`):
+(commit `7001169`):
 
 | Server | c=1 req/s | c=8 req/s | c=32 req/s |
 |---|---:|---:|---:|
