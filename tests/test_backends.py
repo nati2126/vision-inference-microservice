@@ -1,6 +1,7 @@
 """Every available backend: shared schema, precision, and parity with ONNX Runtime FP32 CPU."""
 
 import importlib.util
+import json
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -212,6 +213,12 @@ def test_exported_artifacts_accept_batches(
 
     if case.backend == "pytorch" or case.id == "onnxruntime-cuda-fp32":
         assert limit == 1
+    elif case.backend == "tensorrt":
+        # Chosen at export time (--trt-max-batch) and recorded next to the engine.
+        from app.models.tensorrt_backend import engine_metadata_path
+
+        metadata = json.loads(engine_metadata_path(MODELS_DIR / case.artifact).read_text())
+        assert limit == metadata["max_batch_size"]
     else:
         assert (
             limit is None or limit >= 8
@@ -240,10 +247,10 @@ def test_batched_inference_matches_single_images(
 def test_batch_over_the_engine_limit_is_rejected(
     case_and_backend: tuple[Case, InferenceBackend], bus_image: npt.NDArray[np.uint8]
 ) -> None:
-    _, backend = case_and_backend
+    case, backend = case_and_backend
     limit = backend.max_batch_size
-    if limit is None or limit == 1:
-        pytest.skip("no fixed batch limit above 1")
+    if limit is None or case.backend == "pytorch":
+        pytest.skip("no batch limit to exceed")
     one = backend.preprocess(bus_image)
 
     with pytest.raises(ValueError, match="exceeds"):
