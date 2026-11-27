@@ -1,0 +1,232 @@
+{
+  "generated_at": "2026-11-27T10:30:55+00:00",
+  "duration_s": 3706.3,
+  "hardware": {
+    "os": "Windows 11 (build 10.0.26200)",
+    "cpu": "Intel(R) Core(TM) i9-14900HX",
+    "cpu_cores_physical": 24,
+    "cpu_cores_logical": 32,
+    "ram_gb": 34.1,
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 4070 Laptop GPU",
+      "memory_gb": 8.6,
+      "driver": "591.86"
+    },
+    "on_ac_power": true,
+    "cpu_busy_before_run_pct": 8.5,
+    "python": "3.11.14",
+    "packages": {
+      "numpy": "2.2.6",
+      "opencv-python-headless": "4.10.0.84",
+      "torch": "2.6.0+cu124",
+      "ultralytics": "8.3.57",
+      "onnx": "1.17.0",
+      "onnxruntime-gpu": "1.20.2",
+      "openvino": "2026.4.1",
+      "tensorrt-cu12": "10.16.1.11",
+      "fastapi": "0.115.6",
+      "uvicorn": "0.34.0"
+    },
+    "git_commit": "3d8c1fc"
+  },
+  "settings": {
+    "dataset": "COCO val2017",
+    "images": 5000,
+    "eval_thresholds": {
+      "conf": 0.001,
+      "iou": 0.7,
+      "max_det": 300
+    }
+  },
+  "results": [
+    {
+      "name": "pytorch-cpu-fp32",
+      "backend": "pytorch",
+      "device": "cpu",
+      "accuracy_only": false,
+      "status": "ok",
+      "precision": "fp32",
+      "coco": {
+        "map50_95": 0.3668325611303751,
+        "map50": 0.5172346774760792,
+        "map75": 0.398690050863353,
+        "map_small": 0.17849443976031226,
+        "map_medium": 0.40538339075907154,
+        "map_large": 0.5196441115951008
+      },
+      "in_house": {
+        "map50": 0.5111316801836161,
+        "map50_95": 0.36299930994656987
+      },
+      "images_per_s": 8.7
+    },
+    {
+      "name": "pytorch-cuda-fp32",
+      "backend": "pytorch",
+      "device": "cuda",
+      "accuracy_only": false,
+      "status": "ok",
+      "precision": "fp32",
+      "coco": {
+        "map50_95": 0.36688169804831783,
+        "map50": 0.5172539858474647,
+        "map75": 0.39869457338015085,
+        "map_small": 0.17855486462299458,
+        "map_medium": 0.4055640853492626,
+        "map_large": 0.5195577113155294
+      },
+      "in_house": {
+        "map50": 0.511164184617301,
+        "map50_95": 0.36306229578885196
+      },
+      "images_per_s": 29.5
+    },
+    {
+      "name": "onnxruntime-cpu-fp32",
+      "backend": "onnxruntime",
+      "device": "cpu",
+      "accuracy_only": false,
+      "status": "ok",
+      "precision": "fp32",
+      "coco": {
+        "map50_95": 0.36709179074044185,
+        "map50": 0.5164135004170456,
+        "map75": 0.39872831508576806,
+        "map_small": 0.17770565768010257,
+        "map_medium": 0.40491248153932813,
+        "map_large": 0.5189615020028618
+      },
+      "in_house": {
+        "map50": 0.5101935780393548,
+        "map50_95": 0.3630789778308173
+      },
+      "images_per_s": 16.0
+    },
+    {
+      "name": "onnxruntime-cpu-int8",
+      "backend": "onnxruntime",
+      "device": "cpu",
+      "accuracy_only": false,
+      "status": "ok",
+      "precision": "int8",
+      "coco": {
+        "map50_95": 0.35573848551996035,
+        "map50": 0.503067059926259,
+        "map75": 0.38655955920048796,
+        "map_small": 0.16987405835112082,
+        "map_medium": 0.39462395439666254,
+        "map_large": 0.49884882316697887
+      },
+      "in_house": {
+        "map50": 0.49679430484675446,
+        "map50_95": 0.3517899986139635
+      },
+      "images_per_s": 13.2
+    },
+    {
+      "name": "onnxruntime-cuda-fp32",
+      "backend": "onnxruntime",
+      "device": "cuda",
+      "accuracy_only": false,
+      "status": "ok",
+      "precision": "fp32",
+      "coco": {
+        "map50_95": 0.36730047841179253,
+        "map50": 0.5167920854761517,
+        "map75": 0.3990432047832551,
+        "map_small": 0.17778484386980858,
+        "map_medium": 0.40526917711334187,
+        "map_large": 0.5190485585449519
+      },
+      "in_house": {
+        "map50": 0.5105883007981257,
+        "map50_95": 0.3632706333768606
+      },
+      "images_per_s": 18.7
+    },
+    {
+      "name": "openvino-cpu-fp32",
+      "backend": "openvino",
+      "device": "cpu",
+      "accuracy_only": false,
+      "status": "ok",
+      "precision": "fp32",
+      "coco": {
+        "map50_95": 0.3670950497236534,
+        "map50": 0.516413590385572,
+        "map75": 0.39872818784976194,
+        "map_small": 0.1777056217812616,
+        "map_medium": 0.4049127688634737,
+        "map_large": 0.5189721844422696
+      },
+      "in_house": {
+        "map50": 0.5101934951565656,
+        "map50_95": 0.3630796375382964
+      },
+      "images_per_s": 11.2
+    },
+    {
+      "name": "openvino-cpu-int8",
+      "backend": "openvino",
+      "device": "cpu",
+      "accuracy_only": false,
+      "status": "ok",
+      "precision": "int8",
+      "coco": {
+        "map50_95": 0.3562498904269393,
+        "map50": 0.5033362574633804,
+        "map75": 0.38571089783436624,
+        "map_small": 0.169016036371901,
+        "map_medium": 0.39386522229538223,
+        "map_large": 0.5004335010864442
+      },
+      "in_house": {
+        "map50": 0.49714997534155003,
+        "map50_95": 0.35230040248760447
+      },
+      "images_per_s": 17.1
+    },
+    {
+      "name": "tensorrt-cuda-fp16",
+      "backend": "tensorrt",
+      "device": "cuda",
+      "accuracy_only": false,
+      "status": "ok",
+      "precision": "fp16",
+      "coco": {
+        "map50_95": 0.36748224238275984,
+        "map50": 0.5167720521408404,
+        "map75": 0.3993329809102348,
+        "map_small": 0.17742513679798755,
+        "map_medium": 0.40542273773093146,
+        "map_large": 0.5194045303453882
+      },
+      "in_house": {
+        "map50": 0.5105563923272602,
+        "map50_95": 0.3634931343330385
+      },
+      "images_per_s": 30.5
+    },
+    {
+      "name": "onnxruntime-cpu-int8-naive",
+      "backend": "onnxruntime",
+      "device": "cpu",
+      "accuracy_only": true,
+      "status": "ok",
+      "precision": "int8",
+      "coco": {
+        "map50_95": 0.0,
+        "map50": 0.0,
+        "map75": 0.0,
+        "map_small": 0.0,
+        "map_medium": 0.0,
+        "map_large": 0.0
+      },
+      "in_house": {
+        "map50": 0.0,
+        "map50_95": 0.0
+      },
+      "images_per_s": 16.2
+    }
+  ]
+}

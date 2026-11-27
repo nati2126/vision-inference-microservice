@@ -8,7 +8,9 @@
 A YOLOv8 object-detection service built on FastAPI. The same HTTP API can run
 on **PyTorch, ONNX Runtime (CPU/CUDA, FP32/INT8), OpenVINO (FP32/INT8) or
 TensorRT (FP16)**, selected by an environment variable. A benchmark measures
-every backend on the same machine with the same evaluation code.
+every backend on the same machine with the same evaluation code. On the full
+COCO val2017 set, scored by pycocotools, every FP32 and FP16 backend reaches
+mAP50-95 0.367 and INT8 0.356.
 
 The exported backends run only the network; letterboxing, YOLOv8 output
 decoding, NMS and box rescaling are written out in NumPy
@@ -112,9 +114,9 @@ Full output, including every package version and the commit:
 ### Model
 
 Accuracy on **coco128** (128 images, 929 boxes), confidence 0.001, NMS IoU 0.7,
-identical evaluation code for every backend. coco128 is a small, quick set:
-these numbers compare the backends with each other and are **not** official
-COCO val2017 results. Latency is `predict()` end to end (preprocess + inference
+identical evaluation code for every backend. coco128 is a small, quick set
+for comparing the backends with each other; the full COCO val2017 set, scored
+by pycocotools, is [below](#accuracy-on-coco-val2017). Latency is `predict()` end to end (preprocess + inference
 + postprocess), batch 1, 10 warm-up + 100 timed runs on a 640x480 image.
 
 | Backend | Device | Precision | mAP50 | mAP50-95 | Mean ms | p50 ms | p95 ms | img/s | Size MB | Peak RSS MB | Peak GPU MB |
@@ -140,6 +142,42 @@ These numbers move between runs on this laptop. Before this run the CPU was
 browser), and every CPU row was slower (ONNX Runtime FP32: 48.9 vs 40.9 ms
 p50). Compare rows within one table; the interleaved A/Bs linked below are the
 better evidence for any single change.
+
+### Accuracy on COCO val2017
+
+All 5,000 val2017 images, scored by pycocotools (`COCOeval`), the reference
+COCO evaluator. Same settings as above: confidence 0.001, NMS IoU 0.7, up to
+300 detections and one class per box. Full output:
+[`benchmark/results/i9-14900hx_rtx-4070-laptop-coco-val2017.md`](benchmark/results/i9-14900hx_rtx-4070-laptop-coco-val2017.md)
+(and `.json`).
+
+| Backend | Device | Precision | mAP50-95 | mAP50 | mAP75 | small | medium | large |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| pytorch | cpu | fp32 | 0.367 | 0.517 | 0.399 | 0.178 | 0.405 | 0.520 |
+| pytorch | cuda | fp32 | 0.367 | 0.517 | 0.399 | 0.179 | 0.406 | 0.520 |
+| onnxruntime | cpu | fp32 | 0.367 | 0.516 | 0.399 | 0.178 | 0.405 | 0.519 |
+| onnxruntime | cpu | int8 | 0.356 | 0.503 | 0.387 | 0.170 | 0.395 | 0.499 |
+| onnxruntime | cuda | fp32 | 0.367 | 0.517 | 0.399 | 0.178 | 0.405 | 0.519 |
+| openvino | cpu | fp32 | 0.367 | 0.516 | 0.399 | 0.178 | 0.405 | 0.519 |
+| openvino | cpu | int8 | 0.356 | 0.503 | 0.386 | 0.169 | 0.394 | 0.500 |
+| tensorrt | cuda | fp16 | 0.367 | 0.517 | 0.399 | 0.177 | 0.405 | 0.519 |
+| onnxruntime (ablation: naive INT8) | cpu | int8 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
+
+- **Every FP32 and FP16 backend lands within 0.0007** of the others
+  (mAP50-95 0.3668–0.3675), TensorRT FP16 included.
+- **INT8 costs 0.011 mAP50-95** in both runtimes (0.356 vs 0.367). The
+  calibration images come from coco128, a slice of train2017, so this set is
+  independent of them.
+- **Ultralytics publishes 37.3 for yolov8n; this service scores 36.7.** Its
+  validator differs in two ways: NMS may keep a box under several classes
+  (`multi_label`), and images are batched into shared rectangles. I have not
+  measured how much each contributes.
+- **The in-house evaluator reads 0.004 lower** (0.363). It scores all 300
+  detections, and with crowd boxes left out of the ground truth, detections on
+  crowds count as false positives; pycocotools keeps 100 per image and ignores
+  crowd regions. On synthetic scenes without either difference the two agree
+  to 1e-6 (`tests/test_metrics.py`). The coco128 numbers above use the
+  in-house evaluator.
 
 ### Batching
 
@@ -194,6 +232,8 @@ python -m scripts.export_models --trt-max-batch 16   # a TensorRT engine that ba
 python -m benchmark.run_benchmark               # full: ~11 min here
 python -m benchmark.run_benchmark --quick       # smoke run: ~3 min here
 python -m benchmark.overload                    # load shedding under overload: ~4 min
+python -m benchmark.coco_val                    # COCO val2017 (downloads ~1 GB): ~62 min here
+python -m benchmark.coco_val --limit 200        # its first 200 images, for a quick check
 ```
 
 Backends whose package, artifact or GPU is missing are listed as skipped. Each
@@ -235,7 +275,8 @@ tensor and the same detections.
 **Trade-offs actually observed (tables above):**
 
 - **TensorRT FP16 has the fastest model call:** 2.2 ms against 7.9 ms for ONNX
-  Runtime on CUDA, with no accuracy loss (0.444 vs 0.444 for FP32 ONNX). End to
+  Runtime on CUDA, with no accuracy loss (COCO val2017 mAP50-95 0.367 vs 0.367
+  for FP32 ONNX). End to
   end it is 4.0 ms p50, 18x PyTorch on the CPU and 3.6x PyTorch on CUDA.
 - **For TensorRT, the CPU pipeline was most of the time.** With the NumPy
   pre/post-processing, `predict()` took about 11 ms, for a model call of about
@@ -256,16 +297,17 @@ tensor and the same detections.
 - **Leaving PyTorch is the biggest CPU win before any quantisation:** ONNX
   Runtime FP32 runs at 40.9 ms vs 73.0 ms, with under a quarter of the memory
   (172 vs 749 MB peak RSS).
-- **INT8 is a 3.6x smaller file for −0.014 mAP50-95, but the speed-up depends on
-  the runtime.** OpenVINO INT8 is 1.35x faster than OpenVINO FP32 (33.7 vs
+- **INT8 is a 3.6x smaller file for −0.011 mAP50-95 on val2017, but the
+  speed-up depends on the runtime.** OpenVINO INT8 is 1.35x faster than OpenVINO FP32 (33.7 vs
   45.5 ms). ONNX Runtime INT8 is *slower* than ONNX Runtime FP32 on this CPU
   (51.3 vs 40.9 ms). Timing `session.run` alone shows the same, so it is not
   the pre/post-processing. I have not established the cause: candidates are
   the extra Q/DQ transitions around the FP32 tail and ORT's INT8 kernel choice
   on this hybrid P/E-core CPU.
-- **PyTorch scores slightly higher (0.448 vs 0.444)** because ultralytics
-  letterboxes `.pt` models to a minimal rectangle (640x480 for a 4:3 image)
-  instead of the exported models' fixed 640x640, so its inputs differ a little.
+- **The input shape does not change accuracy.** ultralytics letterboxes `.pt`
+  models to a minimal rectangle (640x480 for a 4:3 image) instead of the
+  exported models' fixed 640x640. On coco128 PyTorch scored 0.448 against
+  0.444; on val2017 both score 0.367, so that gap was the small set's noise.
 - **Opportunistic batching, never a wait.** One worker task runs the model.
   It takes the next queued request plus any others already waiting, up to
   `BATCH_MAX_SIZE`, and makes one `infer_batch` call. Decoding, letterboxing
@@ -317,10 +359,11 @@ every other CUDA library loaded afterwards; the PyTorch backend passes a
 
 ## Limitations
 
-- **Small evaluation set.** coco128 has 128 images and 929 boxes; differences
-  of around 0.01 mAP are within what a different 128 images could change. The
-  INT8 calibration images (100) come from the same set; calibration uses no
-  labels, only activation ranges, but the two are not independent.
+- **coco128 is small.** It has 128 images and 929 boxes; differences of around
+  0.01 mAP are within what a different 128 images could change (PyTorch's
+  +0.004 there vanished on val2017). The INT8 calibration images (100) come
+  from it too. The full val2017 run takes about an hour here, so the main
+  benchmark keeps coco128 and val2017 is a separate run.
 - **One machine.** A laptop with a hybrid P/E-core CPU, Windows, mains power.
   Thread placement, thermals and power plans move CPU numbers; re-run the
   benchmark on your hardware rather than transferring these numbers.

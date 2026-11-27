@@ -212,9 +212,15 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- **Generated:** {report['generated_at']}, commit `{report['hardware'].get('git_commit', '?')}`,"
         f" took {report['duration_s']:.0f}s",
         f"- **Data:** COCO val2017, {report['settings']['images']} images,"
-        f" conf {EVAL_CONF}, NMS IoU {EVAL_IOU}, max {EVAL_MAX_DET} detections, 640x640 letterbox.",
-        "- **Scoring:** pycocotools (`COCOeval`, bbox). The in-house column is this repository's"
-        " `DetectionEvaluator` on the same detections (non-crowd ground truth).",
+        f" conf {EVAL_CONF}, NMS IoU {EVAL_IOU}, max {EVAL_MAX_DET} detections, one class per box."
+        " Exported models take a 640x640 letterbox; PyTorch takes ultralytics' minimal"
+        " rectangle (640x480 for a 4:3 image).",
+        "- **Scoring:** pycocotools (`COCOeval`, bbox), which keeps the top 100 detections per image"
+        " and ignores detections on crowd regions. The in-house column is this repository's"
+        " `DetectionEvaluator` on the same detections: all 300, non-crowd ground truth only, so"
+        " detections on crowds count as false positives.",
+        "- **Images/s** is the evaluation loop (disk read, decode, `predict()` at conf 0.001), batch 1;"
+        " it is not the latency benchmark.",
         "",
         "| Backend | Device | Precision | mAP50-95 | mAP50 | mAP75 | small | medium | large"
         " | In-house mAP50-95 | In-house mAP50 | Images/s |",
