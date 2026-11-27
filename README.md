@@ -115,43 +115,75 @@ COCO val2017 results. Latency is `predict()` end to end (preprocess + inference
 
 | Backend | Device | Precision | mAP50 | mAP50-95 | Mean ms | p50 ms | p95 ms | img/s | Size MB | Peak RSS MB | Peak GPU MB |
 |---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| pytorch | cpu | fp32 | 0.607 | 0.448 | 92.61 | 91.65 | 100.75 | 10.8 | 6.5 | 751 | n/a |
-| pytorch | cuda | fp32 | 0.607 | 0.448 | 22.77 | 22.48 | 25.65 | 43.9 | 6.5 | 1379 | 357 |
-| onnxruntime | cpu | fp32 | 0.594 | 0.444 | 40.44 | 40.60 | 42.27 | 24.7 | 12.8 | 172 | n/a |
-| onnxruntime | cpu | int8 | 0.581 | 0.430 | 51.36 | 52.37 | 53.28 | 19.5 | 3.7 | 142 | n/a |
-| onnxruntime | cuda | fp32 | 0.594 | 0.443 | 18.99 | 18.79 | 20.52 | 52.7 | 12.8 | 1152 | 221 |
-| openvino | cpu | fp32 | 0.594 | 0.444 | 45.33 | 44.55 | 54.26 | 22.1 | 12.9 | 182 | n/a |
-| openvino | cpu | int8 | 0.577 | 0.430 | 32.17 | 30.09 | 40.67 | 31.1 | 4.4 | 209 | n/a |
-| tensorrt | cuda | fp16 | 0.595 | 0.444 | 13.84 | 13.92 | 15.00 | 72.2 | 9.4 | 807 | 242 |
-| onnxruntime (ablation: naive INT8) | cpu | int8 | 0.000 | 0.000 | n/a | n/a | n/a | n/a | 3.6 | 128 | n/a |
+| pytorch | cpu | fp32 | 0.607 | 0.448 | 70.97 | 70.40 | 73.83 | 14.1 | 6.5 | 751 | n/a |
+| pytorch | cuda | fp32 | 0.607 | 0.448 | 14.24 | 13.89 | 15.70 | 70.2 | 6.5 | 1378 | 357 |
+| onnxruntime | cpu | fp32 | 0.594 | 0.444 | 42.39 | 42.35 | 44.84 | 23.6 | 12.7 | 172 | n/a |
+| onnxruntime | cpu | int8 | 0.581 | 0.430 | 52.61 | 53.31 | 54.37 | 19.0 | 3.5 | 141 | n/a |
+| onnxruntime | cuda | fp32 | 0.594 | 0.443 | 16.03 | 15.83 | 17.38 | 62.4 | 12.7 | 1155 | 221 |
+| openvino | cpu | fp32 | 0.594 | 0.444 | 50.15 | 50.05 | 56.50 | 19.9 | 12.9 | 203 | n/a |
+| openvino | cpu | int8 | 0.577 | 0.430 | 37.70 | 37.87 | 44.53 | 26.5 | 4.3 | 195 | n/a |
+| tensorrt | cuda | fp16 | 0.596 | 0.443 | 14.18 | 12.88 | 18.91 | 70.5 | 9.6 | 837 | 594 |
+| onnxruntime (ablation: naive INT8) | cpu | int8 | 0.000 | 0.000 | n/a | n/a | n/a | n/a | 3.5 | 128 | n/a |
+
+All exported artifacts take a dynamic batch. At batch 1 that costs a little:
+run back to back against the earlier fixed-batch exports, `predict()` was
+0–9% slower (TensorRT 15.8–16.3 → 16.7–17.3 ms p50, ONNX Runtime CPU 43.4 →
+43.4–44.3 ms). TensorRT's peak GPU memory is 594 MB rather than 242 MB because
+the engine reserves activations for its largest batch, 16. GPU latencies move
+between runs on this laptop: ONNX Runtime CUDA's p50 was 23.3 ms in the run
+before this one.
+
+### Batching
+
+The model call alone (`infer_batch`, no pre/post-processing) at batch 1 and 8.
+ONNX Runtime on CUDA is capped at batch 1 (see Design decisions), and PyTorch's
+call is ultralytics' whole pipeline, which the service runs one image at a time.
+
+| Backend | Device | Precision | Max batch | batch 1 ms | batch 1 img/s | batch 8 ms | batch 8 img/s |
+|---|---|---|---:|---:|---:|---:|---:|
+| pytorch | cpu | fp32 | 1 | 71.96 | 13.9 | n/a | n/a |
+| pytorch | cuda | fp32 | 1 | 14.22 | 70.3 | n/a | n/a |
+| onnxruntime | cpu | fp32 | any | 34.00 | 29.4 | 208.52 | 38.4 |
+| onnxruntime | cpu | int8 | any | 44.89 | 22.3 | 316.71 | 25.3 |
+| onnxruntime | cuda | fp32 | 1 | 8.01 | 124.8 | n/a | n/a |
+| openvino | cpu | fp32 | any | 33.89 | 29.5 | 238.06 | 33.6 |
+| openvino | cpu | int8 | any | 31.16 | 32.1 | 204.93 | 39.0 |
+| tensorrt | cuda | fp16 | 16 | 3.98 | 251.0 | 30.70 | 260.6 |
 
 ### HTTP
 
 200 `POST /api/v1/detect` requests (the same 640x480 JPEG) per concurrency
 level, uvicorn with one worker, httpx async client on the same machine.
-Re-measured on a later day than the model table, after the inference lock was
-narrowed to the model call alone; compare rows within one table, not across
-the two. Before/after for that change:
+`Batch max` is the server's `BATCH_MAX_SIZE` (1 = batching off), capped by
+what the artifact accepts. The change per backend, and an interleaved
+comparison against the previous serving code:
+[`benchmark/results/i9-14900hx_rtx-4070-laptop-batching-ab.md`](benchmark/results/i9-14900hx_rtx-4070-laptop-batching-ab.md).
+The step before that, narrowing the inference lock to the model call:
 [`benchmark/results/i9-14900hx_rtx-4070-laptop-serving-ab.md`](benchmark/results/i9-14900hx_rtx-4070-laptop-serving-ab.md).
 
-| Backend | Device | Precision | c=1 p50 ms | c=1 p95 ms | c=1 req/s | c=8 p50 ms | c=8 p95 ms | c=8 req/s |
-|---|---|---|---:|---:|---:|---:|---:|---:|
-| pytorch | cpu | fp32 | 81.2 | 109.2 | 11.5 | 739.6 | 820.3 | 11.4 |
-| pytorch | cuda | fp32 | 29.5 | 43.2 | 33.9 | 164.2 | 290.0 | 43.7 |
-| onnxruntime | cpu | fp32 | 52.4 | 54.4 | 19.1 | 276.5 | 284.7 | 28.7 |
-| onnxruntime | cpu | int8 | 63.3 | 64.6 | 15.8 | 363.2 | 365.7 | 22.0 |
-| onnxruntime | cuda | fp32 | 23.8 | 32.9 | 38.2 | 73.3 | 100.4 | 101.5 |
-| openvino | cpu | fp32 | 62.2 | 70.6 | 15.9 | 288.7 | 383.3 | 26.7 |
-| openvino | cpu | int8 | 41.7 | 50.0 | 23.7 | 231.1 | 257.7 | 34.3 |
-| tensorrt | cuda | fp16 | 19.6 | 24.6 | 48.3 | 53.4 | 65.4 | 145.4 |
+| Backend | Device | Precision | Batch max | c=1 p50 ms | c=1 p95 ms | c=1 req/s | c=8 p50 ms | c=8 p95 ms | c=8 req/s | c=32 p50 ms | c=32 p95 ms | c=32 req/s |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| pytorch | cpu | fp32 | 1 | 80.5 | 86.7 | 12.3 | 576.4 | 602.1 | 13.7 | 2399.5 | 2513.3 | 13.1 |
+| pytorch | cuda | fp32 | 1 | 27.6 | 44.2 | 32.5 | 174.1 | 251.9 | 42.6 | 652.3 | 727.2 | 48.5 |
+| onnxruntime | cpu | fp32 | 1 | 52.3 | 54.5 | 19.1 | 282.8 | 291.5 | 28.2 | 1143.0 | 1157.7 | 27.8 |
+| onnxruntime | cpu | fp32 | 8 | 52.5 | 54.3 | 19.1 | 232.2 | 272.7 | 34.1 | 885.9 | 909.9 | 35.5 |
+| onnxruntime | cpu | int8 | 1 | 63.3 | 64.8 | 15.9 | 369.7 | 373.8 | 21.6 | 1479.3 | 1494.5 | 21.4 |
+| onnxruntime | cpu | int8 | 8 | 63.4 | 65.4 | 15.8 | 335.3 | 365.4 | 23.7 | 1317.7 | 1345.0 | 24.0 |
+| onnxruntime | cuda | fp32 | 1 | 24.9 | 33.0 | 38.6 | 88.3 | 106.2 | 87.9 | 392.6 | 440.0 | 79.0 |
+| openvino | cpu | fp32 | 1 | 65.3 | 72.9 | 15.3 | 305.9 | 369.0 | 25.5 | 1168.5 | 1344.5 | 26.3 |
+| openvino | cpu | fp32 | 8 | 64.7 | 71.4 | 15.4 | 322.0 | 389.9 | 24.1 | 1090.9 | 1195.2 | 28.3 |
+| openvino | cpu | int8 | 1 | 47.5 | 60.3 | 20.9 | 239.2 | 278.3 | 33.2 | 977.6 | 1057.5 | 32.6 |
+| openvino | cpu | int8 | 8 | 41.9 | 51.3 | 23.4 | 231.2 | 280.1 | 34.1 | 887.8 | 944.4 | 35.6 |
+| tensorrt | cuda | fp16 | 1 | 21.2 | 26.6 | 45.0 | 68.3 | 83.6 | 113.8 | 294.9 | 351.8 | 102.1 |
+| tensorrt | cuda | fp16 | 8 | 21.2 | 28.1 | 44.4 | 62.8 | 86.1 | 125.6 | 230.0 | 288.0 | 132.1 |
 
 ### Reproduce
 
 ```bash
 pip install -e ".[openvino,tensorrt,bench]"   # whichever extras fit your machine
 python -m scripts.export_models                 # first TensorRT build: ~8 min
-python -m benchmark.run_benchmark               # full: ~6.5 min here
-python -m benchmark.run_benchmark --quick       # smoke run: ~2.5 min here
+python -m benchmark.run_benchmark               # full: ~11 min here
+python -m benchmark.run_benchmark --quick       # smoke run: ~3 min here
 ```
 
 Backends whose package, artifact or GPU is missing are listed as skipped. Each
@@ -176,8 +208,9 @@ as QuantizeLinear/DequantizeLinear (QDQ) pairs: per-channel INT8 weights, UInt8
 activations. Quantising the whole graph scores **mAP50-95 0.000**.
 YOLOv8's final Concat joins box coordinates (0–640 px) with class
 scores (0–1) in one tensor, and a single UInt8 scale covering 0–640 has a step
-of about 2.5, so every score rounds to 0. Keeping the 24 decode nodes after the
-head's convolutions in FP32 recovers **0.430** against 0.444 for FP32; 63 of
+of about 2.5, so every score rounds to 0. Keeping the decode nodes after the
+head's convolutions in FP32 (124 in this export, most of them shape arithmetic
+for the dynamic batch) recovers **0.430** against 0.444 for FP32; 63 of
 the 64 convolutions are still INT8 (the exception is the DFL's fixed-weight
 1x1 conv, which is part of the decode tail). `--int8-naive` on the export script
 reproduces the broken file, and the benchmark scores it as an ablation.
@@ -186,35 +219,51 @@ reproduces the broken file, and the benchmark scores it as an ablation.
 accuracy differences come from runtimes and precisions, not from three copies
 of the decode code. On the same ONNX file it matches ultralytics bit for bit.
 
-**Trade-offs actually observed (table above):**
+**Trade-offs actually observed (tables above):**
 
-- **TensorRT FP16 is the fastest:** 13.8 ms (6.7x PyTorch on CPU, 1.6x PyTorch
-  on CUDA) with no accuracy loss (0.444 vs 0.444 for FP32 ONNX).
+- **TensorRT FP16 has the fastest model call:** 4.0 ms against 8.0 ms for ONNX
+  Runtime on CUDA, with no accuracy loss (0.443 vs 0.444 for FP32 ONNX). End to
+  end it is 12.9 ms p50, 5.5x PyTorch on the CPU but level with PyTorch on CUDA
+  (13.9 ms): `predict()` letterboxes (about 5 ms) and decodes plus NMS (about
+  3 ms) in NumPy on the CPU, and that now outweighs the network.
 - **Leaving PyTorch is the biggest CPU win before any quantisation:** ONNX
-  Runtime FP32 runs at 40.4 ms vs 92.6 ms, with about a quarter of the memory
+  Runtime FP32 runs at 42.4 ms vs 70.4 ms, with under a quarter of the memory
   (172 vs 751 MB peak RSS).
-- **INT8 is a 3.5x smaller file for −0.014 mAP50-95, but the speed-up depends on
-  the runtime.** OpenVINO INT8 is 1.4x faster than OpenVINO FP32 (32.2 vs
-  45.3 ms). ONNX Runtime INT8 is *slower* than ONNX Runtime FP32 on this CPU
-  (51.4 vs 40.4 ms). Timing `session.run` alone shows the same, so it is not
+- **INT8 is a 3.6x smaller file for −0.014 mAP50-95, but the speed-up depends on
+  the runtime.** OpenVINO INT8 is 1.3x faster than OpenVINO FP32 (37.9 vs
+  50.1 ms). ONNX Runtime INT8 is *slower* than ONNX Runtime FP32 on this CPU
+  (53.3 vs 42.4 ms). Timing `session.run` alone shows the same, so it is not
   the pre/post-processing. I have not established the cause: candidates are
   the extra Q/DQ transitions around the FP32 tail and ORT's INT8 kernel choice
   on this hybrid P/E-core CPU.
 - **PyTorch scores slightly higher (0.448 vs 0.444)** because ultralytics
   letterboxes `.pt` models to a minimal rectangle (640x480 for a 4:3 image)
   instead of the exported models' fixed 640x640, so its inputs differ a little.
-- **Only the model call is serialised.** There is one model instance per
-  process, and a lock lets one request at a time into it. Decoding,
-  letterboxing and NMS for other requests run alongside it in the thread pool.
-  Going from concurrency 1 to 8 lifts throughput 2.7–3.0x on the GPU backends
-  and 1.4–1.7x on the CPU ones, where those stages compete with inference for
-  cores. PyTorch gains little (1.0–1.3x), because ultralytics letterboxes and
-  runs NMS inside the locked call. When the lock covered all three stages,
-  TensorRT served 72.5 req/s at concurrency 8; it now serves 145.4 (A/B run
-  back to back on the same day). Going further needs dynamic batching or more
-  workers.
+- **Opportunistic batching, never a wait.** One worker task runs the model.
+  It takes the next queued request plus any others already waiting, up to
+  `BATCH_MAX_SIZE`, and makes one `infer_batch` call. Decoding, letterboxing
+  and NMS run in the thread pool alongside it. With `BATCH_TIMEOUT_MS=0`, a
+  request that arrives while the model is idle runs at once; batches only form
+  when requests queue up behind a running call. Every batch size is run once at
+  startup, because OpenVINO prepares each new input shape on first use (about
+  80–100 ms per shape here).
+- **Batching pays off where the model call dominates.** For ONNX Runtime on the
+  CPU, batching on serves 21–28% more requests at concurrency 8 and 32 than
+  batching off, and 16–23% more than the previous lock-based server in an
+  interleaved A/B. For TensorRT the gain over the previous server is within the
+  noise. Near 120–150 req/s the single process is bound by its CPU work
+  (decode, letterbox, NMS, HTTP), not by the 4 ms model call. The dynamic-batch
+  engine also costs 3–10% at batch 1, and with batching off this branch is
+  14–16% slower than the previous server for TensorRT. Details:
+  [`benchmark/results/i9-14900hx_rtx-4070-laptop-batching-ab.md`](benchmark/results/i9-14900hx_rtx-4070-laptop-batching-ab.md).
+- **ONNX Runtime on CUDA does not batch.** Its CUDA provider re-plans every
+  convolution when the input shape changes, about 100–130 ms per change here,
+  and neither `cudnn_conv_algo_search` nor the memory-arena options avoided it.
+  With varying batch sizes, throughput at concurrency 8 fell from 59.8 to
+  27.0 req/s, so the backend reports a batch limit of 1. TensorRT pays about
+  3 ms per change; ONNX Runtime on the CPU and OpenVINO pay nothing measurable.
 - **HTTP adds about 10 ms** per request over `predict()` at concurrency 1
-  (ONNX Runtime CPU in the original run: 50.3 vs 40.6 ms p50).
+  (ONNX Runtime CPU: 52.3 vs 42.4 ms p50).
 
 **Two runtime traps, both handled in code.** ONNX Runtime silently falls back
 to the CPU when the CUDA provider fails to initialise; the backend checks the
@@ -234,8 +283,11 @@ every other CUDA library loaded afterwards; the PyTorch backend passes a
 - **One machine.** A laptop with a hybrid P/E-core CPU, Windows, mains power.
   Thread placement, thermals and power plans move CPU numbers; re-run the
   benchmark on your hardware rather than transferring these numbers.
-- **Batch size 1 only.** No dynamic batching; GPU utilisation is far from
-  saturated at these latencies.
+- **One process, one model.** Batching only forms under concurrency, and for
+  the GPU backends the single uvicorn process runs out of CPU before the GPU is
+  busy. More workers would each load their own copy of the model. The TensorRT
+  engine accepts batches up to 16; ONNX Runtime on CUDA serves one image per
+  call (see Design decisions).
 - **TensorRT engines are not portable.** They are tied to the GPU model and
   TensorRT version; the first build takes about 8 minutes here (a timing
   cache speeds up rebuilds).
@@ -260,7 +312,8 @@ every other CUDA library loaded afterwards; the PyTorch backend passes a
   "model_loaded": true,
   "backend": "onnxruntime",
   "precision": "int8",
-  "device": "cpu"
+  "device": "cpu",
+  "max_batch_size": 8
 }
 ```
 
@@ -336,6 +389,8 @@ All settings come from environment variables (see [`.env.example`](.env.example)
 | `MODEL_WEIGHTS_DIR` | `~/.cache/vision-inference/weights` | Where a bare `.pt` filename is downloaded and cached |
 | `MAX_UPLOAD_BYTES` | `10485760` | Largest accepted upload (10 MiB) |
 | `MAX_IMAGE_PIXELS` | `50000000` | Largest accepted width x height, read from the image header before decoding |
+| `BATCH_MAX_SIZE` | `8` | Most queued requests run as one model call; `1` turns batching off. Capped by the model (`max_batch_size` in `/health`) |
+| `BATCH_TIMEOUT_MS` | `0` | How long a model call waits for more requests. `0` only takes those already queued, so a lone request is never delayed |
 | `CORS_ALLOW_ORIGINS` | `["*"]` | Allowed origins, as a JSON list |
 | `CORS_ALLOW_CREDENTIALS` | `false` | Ignored while origins is `["*"]`, since browsers reject that pairing |
 | `LOG_LEVEL` | `INFO` | Logging severity |
