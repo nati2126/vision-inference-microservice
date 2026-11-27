@@ -27,7 +27,7 @@
       "fastapi": "0.115.6",
       "uvicorn": "0.34.0"
     },
-    "git_commit": "3d8c1fc"
+    "git_commit": "50f9ec4"
   },
   "settings": {
     "dataset": "COCO val2017",
