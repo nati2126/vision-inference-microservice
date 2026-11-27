@@ -33,7 +33,7 @@ dependencies = [
 gpu = ["onnxruntime-gpu>=1.20"]
 openvino = ["openvino>=2025.0"]
 tensorrt = ["tensorrt-cu12>=10.0,<11"]
-bench = ["psutil>=5.9", "nvidia-ml-py>=12.0"]
+bench = ["psutil>=5.9", "nvidia-ml-py>=12.0", "pycocotools>=2.0"]
 dev = [
     "pytest==8.3.4",
     "pytest-asyncio==0.25.0",
@@ -70,6 +70,6 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
-module = ["ultralytics.*", "cv2.*", "onnxruntime.*", "openvino.*", "tensorrt.*", "pynvml.*", "psutil.*"]
+module = ["ultralytics.*", "cv2.*", "onnxruntime.*", "openvino.*", "tensorrt.*", "pynvml.*", "psutil.*", "pycocotools.*"]
 ignore_missing_imports = true
 implicit_reexport = true
